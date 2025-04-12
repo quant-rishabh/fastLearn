@@ -3,23 +3,36 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
+interface SubjectMeta {
+  label: string;
+  value: string;
+  file: string;
+}
+
 export default function Home() {
+  const [subjects, setSubjects] = useState<SubjectMeta[]>([]);
   const [subject, setSubject] = useState('');
   const [topic, setTopic] = useState('');
   const [topics, setTopics] = useState<string[]>([]);
 
-  const subjectOptions = [
-    { label: 'Operating Systems', value: 'operating_system' },
-    { label: 'Computer Networks', value: 'computer_network' },
-    { label: 'Quiz', value: 'quiz' }
-  ];
+  useEffect(() => {
+    const loadSubjects = async () => {
+      const res = await fetch('/data/subjects.json');
+      const data = await res.json();
+      setSubjects(data);
+    };
+    loadSubjects();
+  }, []);
 
   useEffect(() => {
     if (!subject) return;
 
     const fetchTopics = async () => {
       try {
-        const res = await fetch(`/data/${subject}.json`);
+        const subjectMeta = subjects.find((s) => s.value === subject);
+        if (!subjectMeta) return;
+
+        const res = await fetch(`/data/${subjectMeta.file}`);
         const data = await res.json();
         setTopics(Object.keys(data));
         setTopic('');
@@ -30,7 +43,7 @@ export default function Home() {
     };
 
     fetchTopics();
-  }, [subject]);
+  }, [subject, subjects]);
 
   return (
     <main className="p-4 max-w-md mx-auto">
@@ -43,8 +56,10 @@ export default function Home() {
         className="w-full p-2 border rounded mb-4"
       >
         <option value="">-- Choose Subject --</option>
-        {subjectOptions.map((opt) => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        {subjects.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
         ))}
       </select>
 
@@ -58,7 +73,9 @@ export default function Home() {
           >
             <option value="">-- Choose Topic --</option>
             {topics.map((t) => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t} value={t}>
+                {t}
+              </option>
             ))}
           </select>
         </>

@@ -1,0 +1,17 @@
+{
+  "TCP/IP": [
+    { "question": "What is the port number for HTTP?", "answer": "80" },
+    { "question": "Which protocol guarantees reliable delivery?", "answer": "TCP" },
+    { "question": "IP stands for?", "answer": "Internet Protocol" }
+  ],
+  "OSI Model": [
+    { "question": "How many layers are in OSI model?", "answer": "7" },
+    { "question": "Which layer does IP belong to?", "answer": "Network" },
+    { "question": "Which OSI layer is responsible for end-to-end communication?", "answer": "Transport" }
+  ],
+  "Routing": [
+    { "question": "What device connects two different networks?", "answer": "Router" },
+    { "question": "Which protocol is used for finding the shortest path?", "answer": "OSPF" },
+    { "question": "Which IP class is used for multicast?", "answer": "Class D" }
+  ]
+}

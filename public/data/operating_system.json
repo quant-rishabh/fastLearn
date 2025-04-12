@@ -1,0 +1,14 @@
+{
+  "english tesse" : [
+    {
+      "question": "मैं हर सुबह नहाता हूँ।",
+      "answer": "I take a bath every morning.",
+      "note": "Use present simple tense for habits."
+    },
+    {
+      "question": "वह सुबह योग करती है।",
+      "answer": "She does yoga in the morning.",
+      "note": "Third person singular - add 's' to verb."
+    }
+  ]
+}
