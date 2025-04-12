@@ -1,0 +1,44 @@
+{
+  "english tense": [
+    {
+      "question": "मैं हर सुबह नहाता हूँ।",
+      "answer": "I take a bath every morning."
+    },
+    {
+      "question": "वह सुबह योग करती है।",
+      "answer": "She does yoga in the morning."
+    },
+    {
+      "question": "मैं ऑफिस जल्दी जाता हूँ।",
+      "answer": "I go to the office early."
+    },
+    {
+      "question": "हम रात को फिल्म देखते हैं।",
+      "answer": "We watch a movie at night."
+    },
+    {
+      "question": "मैं दिन में दो बार खाना खाता हूँ।",
+      "answer": "I eat food twice a day."
+    },
+    {
+      "question": "मैं हर दिन 10,000 कदम चलता हूँ।",
+      "answer": "I walk 10,000 steps every day."
+    },
+    {
+      "question": "वह हर दिन किताबें पढ़ती है।",
+      "answer": "She reads books every day."
+    },
+    {
+      "question": "हम सुबह अखबार पढ़ते हैं।",
+      "answer": "We read the newspaper in the morning."
+    },
+    {
+      "question": "बच्चे हर शाम पार्क में खेलते हैं।",
+      "answer": "The kids play in the park every evening."
+    },
+    {
+      "question": "मैं हर रविवार सफाई करता हूँ।",
+      "answer": "I clean on every Sunday."
+    }
+  ]
+}

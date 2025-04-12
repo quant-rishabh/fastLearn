@@ -1,8 +1,8 @@
 [
     {
-      "label": "Operating Systems",
-      "value": "os",
-      "file": "operating_system.json"
+      "label": "English",
+      "value": "en",
+      "file": "english.json"
     },
     {
       "label": "Computer Networks",
