@@ -1,12 +1,10 @@
 [
     {
       "label": "English",
-      "value": "en",
-      "file": "english.json"
+      "filename": "english"
     },
     {
       "label": "Computer Networks",
-      "value": "cn",
-      "file": "computer_network.json"
+      "filename": "computer_network"
     }
   ]

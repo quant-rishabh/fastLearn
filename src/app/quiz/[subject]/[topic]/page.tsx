@@ -96,27 +96,38 @@ export default function QuizPage() {
         </>
       )}
 
-      {hasSubmitted && (
-        <>
-          <div
-            className={`mt-4 p-3 rounded text-sm `}
-          >
-            {isCorrect ? '✅ Correct!' : '❌ Incorrect.'}
-            {questions[currentIndex].note && (
-              <div className="mt-2">
-                <strong>Note:</strong> {questions[currentIndex].note}
-              </div>
-            )}
-          </div>
+{hasSubmitted && (
+  <>
+    <div
+      className={`mt-4 p-3 rounded text-sm `}
+    >
+      {isCorrect ? '✅ Correct!' : '❌ Incorrect.'}
 
-          <button
-            onClick={handleNext}
-            className="mt-4 w-full bg-gray-800 text-white py-2 rounded"
-          >
-            {currentIndex + 1 === questions.length ? 'Finish Quiz' : 'Next'}
-          </button>
-        </>
+      <div className="mt-2">
+        <strong>Correct Answer:</strong> {questions[currentIndex].answer}
+      </div>
+
+      <div className="mt-1">
+        <strong>Your Answer:</strong> {userAnswer.trim()}
+      </div>
+
+      {questions[currentIndex].note && (
+        <div className="mt-2">
+          <strong>Note:</strong> {questions[currentIndex].note}
+        </div>
       )}
+    </div>
+
+    <button
+      onClick={handleNext}
+      className="mt-4 w-full bg-gray-800 text-white py-2 rounded"
+    >
+      {currentIndex + 1 === questions.length ? 'Finish Quiz' : 'Next'}
+    </button>
+  </>
+)}
+
+
     </main>
   );
 }

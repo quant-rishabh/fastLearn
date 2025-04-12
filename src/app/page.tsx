@@ -3,16 +3,25 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
+interface SubjectMeta {
+  label: string;
+  filename: string;
+}
+
 export default function Home() {
+  const [subjects, setSubjects] = useState<SubjectMeta[]>([]);
   const [subject, setSubject] = useState('');
   const [topic, setTopic] = useState('');
   const [topics, setTopics] = useState<string[]>([]);
 
-  const subjectOptions = [
-    { label: 'Operating Systems', value: 'operating_system' },
-    { label: 'Computer Networks', value: 'computer_network' },
-    { label: 'Quiz', value: 'quiz' }
-  ];
+  useEffect(() => {
+    const loadSubjects = async () => {
+      const res = await fetch('/data/subjects.json');
+      const data = await res.json();
+      setSubjects(data);
+    };
+    loadSubjects();
+  }, []);
 
   useEffect(() => {
     if (!subject) return;
@@ -43,8 +52,10 @@ export default function Home() {
         className="w-full p-2 border rounded mb-4"
       >
         <option value="">-- Choose Subject --</option>
-        {subjectOptions.map((opt) => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        {subjects.map((opt) => (
+          <option key={opt.filename} value={opt.filename}>
+            {opt.label}
+          </option>
         ))}
       </select>
 
@@ -58,7 +69,9 @@ export default function Home() {
           >
             <option value="">-- Choose Topic --</option>
             {topics.map((t) => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t} value={t}>
+                {t}
+              </option>
             ))}
           </select>
         </>
