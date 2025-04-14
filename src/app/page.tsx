@@ -2,59 +2,78 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { supabase } from '@/utils/supabase';
 
-interface SubjectMeta {
+interface Subject {
+  id: string;
   label: string;
-  filename: string;
+  slug: string;
+}
+
+interface Topic {
+  id: string;
+  name: string;
+  subject_id: string;
 }
 
 export default function Home() {
-  const [subjects, setSubjects] = useState<SubjectMeta[]>([]);
-  const [subject, setSubject] = useState('');
-  const [topic, setTopic] = useState('');
-  const [topics, setTopics] = useState<string[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjectSlug, setSubjectSlug] = useState('');
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [topicName, setTopicName] = useState('');
 
+  // Load all subjects from Supabase
   useEffect(() => {
     const loadSubjects = async () => {
-      const res = await fetch('/data/subjects.json');
-      const data = await res.json();
-      setSubjects(data);
+      const { data, error } = await supabase.from('subjects').select('*');
+      if (!error && data) {
+        setSubjects(data);
+      }
     };
     loadSubjects();
   }, []);
 
+  // Load topics when a subject is selected
   useEffect(() => {
-    if (!subject) return;
-
     const fetchTopics = async () => {
-      try {
-        const res = await fetch(`/data/${subject}.json`);
-        const data = await res.json();
-        setTopics(Object.keys(data));
-        setTopic('');
-      } catch (err) {
-        console.error('Error loading topics:', err);
-        setTopics([]);
+      if (!subjectSlug) return;
+      const subject = subjects.find((s) => s.slug === subjectSlug);
+      if (!subject) return;
+
+      const { data, error } = await supabase
+        .from('topics')
+        .select('*')
+        .eq('subject_id', subject.id);
+
+      if (!error && data) {
+        setTopics(data);
+        setTopicName('');
       }
     };
 
     fetchTopics();
-  }, [subject]);
+  }, [subjectSlug, subjects]);
 
   return (
     <main className="p-4 max-w-md mx-auto">
       <h1 className="text-xl font-bold mb-4">Quick Learn Quiz</h1>
 
+      <Link href="/admin">
+  <button className="w-full mt-6 bg-gray-800 text-white py-2 rounded hover:bg-gray-700">
+    Admin Panel
+  </button>
+</Link>
+
       <label className="block mb-2">Select Subject:</label>
       <select
-        value={subject}
-        onChange={(e) => setSubject(e.target.value)}
+        value={subjectSlug}
+        onChange={(e) => setSubjectSlug(e.target.value)}
         className="w-full p-2 border rounded mb-4"
       >
         <option value="">-- Choose Subject --</option>
-        {subjects.map((opt) => (
-          <option key={opt.filename} value={opt.filename}>
-            {opt.label}
+        {subjects.map((subject) => (
+          <option key={subject.id} value={subject.slug}>
+            {subject.label}
           </option>
         ))}
       </select>
@@ -63,22 +82,22 @@ export default function Home() {
         <>
           <label className="block mb-2">Select Topic:</label>
           <select
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
+            value={topicName}
+            onChange={(e) => setTopicName(e.target.value)}
             className="w-full p-2 border rounded mb-4"
           >
             <option value="">-- Choose Topic --</option>
-            {topics.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            {topics.map((topic) => (
+              <option key={topic.id} value={topic.name}>
+                {topic.name}
               </option>
             ))}
           </select>
         </>
       )}
 
-      {subject && topic && (
-        <Link href={`/quiz/${subject}/${encodeURIComponent(topic)}`}>
+      {subjectSlug && topicName && (
+        <Link href={`/quiz/${subjectSlug}/${encodeURIComponent(topicName)}`}>
           <button className="w-full bg-black text-white py-2 rounded">
             Start Quiz
           </button>

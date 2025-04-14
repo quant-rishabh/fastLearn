@@ -9,6 +9,8 @@ interface Question {
   question: string;
   answer: string;
   note?: string;
+  image_before?: string;
+  image_after?: string;
 }
 
 export default function QuizPage() {
@@ -20,27 +22,60 @@ export default function QuizPage() {
   const [finished, setFinished] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
+  const [fuzzyThreshold, setFuzzyThreshold] = useState(80); // default 80%
+
 
   useEffect(() => {
     const loadQuiz = async () => {
-      const res = await fetch(`/data/${subject}.json`);
-      const data = await res.json();
-      const topicQuestions = data[decodeURIComponent(topic as string)] || [];
-      setQuestions(topicQuestions);
+        const res = await fetch(`/api/get-quiz?subject=${subject}&topic=${decodeURIComponent(topic as string)}`);
+        const { questions } = await res.json();
+        setQuestions(questions || []);
     };
     loadQuiz();
   }, [subject, topic]);
 
   const handleSubmit = () => {
     const correctAnswer = questions[currentIndex]?.answer;
-    const match = isFuzzyMatch(userAnswer.trim(), correctAnswer);
-    setIsCorrect(match);
+    const threshold = fuzzyThreshold;
+  
+    const answers = userAnswer
+      .split(',')
+      .map((a) => a.trim().toLowerCase());
+  
+    const expectedAnswers = correctAnswer
+      .split(',')
+      .map((a) => a.trim().toLowerCase());
+  
+    let allMatched = true;
+  
+    for (const answer of answers) {
+      let matched = false;
+  
+      for (const expected of expectedAnswers) {
+        if (isFuzzyMatch(answer, expected, threshold)) {
+          matched = true;
+          break;
+        }
+      }
+  
+      if (!matched) {
+        allMatched = false;
+        break;
+      }
+    }
+  
+    const sameLength = answers.length === expectedAnswers.length;
+    const isMatch = allMatched && sameLength;
+  
+    setIsCorrect(isMatch);
     setHasSubmitted(true);
-    if (match) {
+    if (isMatch) {
       setScore((prev) => prev + 1);
     }
   };
-
+  
+  
+  
   const handleNext = () => {
     if (currentIndex + 1 < questions.length) {
       setCurrentIndex((prev) => prev + 1);
@@ -74,6 +109,30 @@ export default function QuizPage() {
   ← Back to Home
 </Link>
 
+<div className="mb-4">
+  <label className="block text-sm font-medium mb-1">
+    Fuzzy Match Threshold: {fuzzyThreshold}%
+  </label>
+  <input
+    type="range"
+    min={50}
+    max={100}
+    step={1}
+    value={fuzzyThreshold}
+    onChange={(e) => setFuzzyThreshold(Number(e.target.value))}
+    className="w-full"
+  />
+</div>
+
+
+{questions[currentIndex].image_before && !hasSubmitted && (
+  <img
+    src={questions[currentIndex].image_before}
+    alt="Question Visual"
+    className="mb-4 rounded w-full max-h-48 object-contain border"
+  />
+)}
+
       <h2 className="text-lg font-semibold mb-4">Question {currentIndex + 1}</h2>
       <p className="mb-4">{questions[currentIndex].question}</p>
 
@@ -83,7 +142,7 @@ export default function QuizPage() {
             type="text"
             value={userAnswer}
             onChange={(e) => setUserAnswer(e.target.value)}
-            placeholder="Type your answer"
+            placeholder="Type all answers, separated by commas"
             className="w-full p-2 border rounded mb-4"
           />
 
@@ -117,6 +176,14 @@ export default function QuizPage() {
         </div>
       )}
     </div>
+
+    {questions[currentIndex].image_after && (
+  <img
+    src={questions[currentIndex].image_after}
+    alt="Explanation Visual"
+    className="mt-4 rounded w-full max-h-48 object-contain border"
+  />
+)}
 
     <button
       onClick={handleNext}
