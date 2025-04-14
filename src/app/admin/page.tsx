@@ -44,6 +44,9 @@ const [imageAfter, setImageAfter] = useState<string | null>(null);
 
 const [questions, setQuestions] = useState<Question[]>([]);
 
+const [inputMode, setInputMode] = useState<'form' | 'json'>('form');
+const [bulkJson, setBulkJson] = useState('');
+
 
 
   // Active tab
@@ -111,6 +114,47 @@ const [questions, setQuestions] = useState<Question[]>([]);
       setSubjects(data || []);
     }
   };
+
+  const handleBulkSubmit = async () => {
+    try {
+      const parsed = JSON.parse(bulkJson);
+  
+      if (!Array.isArray(parsed)) {
+        alert("❌ JSON must be an array of question objects.");
+        return;
+      }
+  
+      const subject = subjects.find((s) => s.slug === selectedSubject);
+      const topic = topics.find((t) => t.name === topicName);
+  
+      if (!subject || !topic) {
+        alert("❌ Select subject & topic first.");
+        return;
+      }
+  
+      const payload = parsed.map((q: any) => ({
+        topic_id: topic.id,
+        question: q.question || '',
+        answer: q.answer || '',
+        note: q.note || null,
+        image_before: q.image_before || null,
+        image_after: q.image_after || null
+      }));
+  
+      const { error } = await supabase.from('questions').insert(payload);
+  
+      if (!error) {
+        alert('✅ Bulk questions saved!');
+        setBulkJson('');
+      } else {
+        console.error(error);
+        alert('❌ Failed to save questions.');
+      }
+    } catch (err) {
+      alert('❌ Invalid JSON format.');
+    }
+  };
+  
 
   const handleSubmitQuestion = async () => {
     const res = await fetch('/api/save-quiz', {
@@ -291,7 +335,7 @@ const [questions, setQuestions] = useState<Question[]>([]);
   <div className="mb-6">
     <h2 className="text-lg font-semibold mb-2">➕ Add Question</h2>
 
-    {/* Subject Dropdown */}
+    {/* Subject & Topic Dropdowns (Always needed) */}
     <select
       value={selectedSubject}
       onChange={(e) => setSelectedSubject(e.target.value)}
@@ -305,59 +349,98 @@ const [questions, setQuestions] = useState<Question[]>([]);
       ))}
     </select>
 
-    {/* Topic Dropdown */}
     <select
-  value={topicName}
-  onChange={(e) => setTopicName(e.target.value)}
-  className="w-full p-2 border rounded mb-2"
->
-  <option value="">-- Select Topic --</option>
-  {topics.map((t) => (
-    <option key={t.id} value={t.name}>
-      {t.name}
-    </option>
-  ))}
-</select>
-
-    <input
-      placeholder="Question"
-      className="w-full p-2 border rounded mb-2"
-      value={question}
-      onChange={(e) => setQuestion(e.target.value)}
-    />
-
-    <input
-      placeholder="Answer"
-      className="w-full p-2 border rounded mb-2"
-      value={answer}
-      onChange={(e) => setAnswer(e.target.value)}
-    />
-
-    <input
-      placeholder="Note (optional)"
-      className="w-full p-2 border rounded mb-2"
-      value={note}
-      onChange={(e) => setNote(e.target.value)}
-    />
-
-    {/* Image Before Upload */}
-    <label className="block mb-1">Image Before (optional)</label>
-    <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'before')} className="mb-2" />
-    {imageBefore && <img src={imageBefore} alt="before" className="mb-2 rounded w-full max-h-40 object-contain border" />}
-
-    {/* Image After Upload */}
-    <label className="block mb-1">Image After (optional)</label>
-    <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'after')} className="mb-2" />
-    {imageAfter && <img src={imageAfter} alt="after" className="mb-4 rounded w-full max-h-40 object-contain border" />}
-
-    <button
-      onClick={handleSubmitQuestion}
-      className="w-full bg-yellow-600 text-white py-2 rounded hover:bg-yellow-500"
+      value={topicName}
+      onChange={(e) => setTopicName(e.target.value)}
+      className="w-full p-2 border rounded mb-4"
     >
-      Save Question
-    </button>
+      <option value="">-- Select Topic --</option>
+      {topics.map((t) => (
+        <option key={t.id} value={t.name}>
+          {t.name}
+        </option>
+      ))}
+    </select>
+
+    {/* Mode Toggle */}
+    <div className="flex gap-2 mb-4 justify-center">
+      <button
+        onClick={() => setInputMode('form')}
+        className={`px-4 py-1 rounded ${inputMode === 'form' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+      >
+        Manual Form
+      </button>
+      <button
+        onClick={() => setInputMode('json')}
+        className={`px-4 py-1 rounded ${inputMode === 'json' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}
+      >
+        Bulk JSON Input
+      </button>
+    </div>
+
+    {/* Manual Form */}
+    {inputMode === 'form' && (
+      <>
+        <input
+          placeholder="Question"
+          className="w-full p-2 border rounded mb-2"
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+        />
+
+        <input
+          placeholder="Answer"
+          className="w-full p-2 border rounded mb-2"
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+        />
+
+        <input
+          placeholder="Note (optional)"
+          className="w-full p-2 border rounded mb-2"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+
+        {/* Image Uploads */}
+        <label className="block mb-1">Image Before (optional)</label>
+        <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'before')} className="mb-2" />
+        {imageBefore && <img src={imageBefore} alt="before" className="mb-2 rounded w-full max-h-40 object-contain border" />}
+
+        <label className="block mb-1">Image After (optional)</label>
+        <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'after')} className="mb-2" />
+        {imageAfter && <img src={imageAfter} alt="after" className="mb-4 rounded w-full max-h-40 object-contain border" />}
+
+        <button
+          onClick={handleSubmitQuestion}
+          className="w-full bg-yellow-600 text-white py-2 rounded hover:bg-yellow-500"
+        >
+          Save Question
+        </button>
+      </>
+    )}
+
+    {/* Bulk JSON */}
+    {inputMode === 'json' && (
+      <>
+        <textarea
+          placeholder='Paste array of {"question": "...", "answer": "..."}'
+          value={bulkJson}
+          onChange={(e) => setBulkJson(e.target.value)}
+          rows={8}
+          className="w-full p-2 border rounded font-mono text-sm"
+        />
+        <button
+          onClick={handleBulkSubmit}
+          className="mt-2 w-full bg-green-700 text-white py-2 rounded hover:bg-green-600"
+        >
+          Save All Questions
+        </button>
+      </>
+    )}
   </div>
 )}
+
 
 
       {/* Edit Questions (Coming Next) */}
