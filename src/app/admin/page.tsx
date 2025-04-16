@@ -47,6 +47,15 @@ const [questions, setQuestions] = useState<Question[]>([]);
 const [inputMode, setInputMode] = useState<'form' | 'json'>('form');
 const [bulkJson, setBulkJson] = useState('');
 
+const [message, setMessage] = useState<string | null>(null);
+const [loading, setLoading] = useState(false);
+
+// Helper to show message
+const showMessage = (msg: string, duration = 3000) => {
+  setMessage(msg);
+  setTimeout(() => setMessage(null), duration);
+};
+
 
 
   // Active tab
@@ -120,7 +129,7 @@ const [bulkJson, setBulkJson] = useState('');
       const parsed = JSON.parse(bulkJson);
   
       if (!Array.isArray(parsed)) {
-        alert("❌ JSON must be an array of question objects.");
+        showMessage("❌ JSON must be an array of question objects.");
         return;
       }
   
@@ -128,7 +137,7 @@ const [bulkJson, setBulkJson] = useState('');
       const topic = topics.find((t) => t.name === topicName);
   
       if (!subject || !topic) {
-        alert("❌ Select subject & topic first.");
+        showMessage("❌ Select subject & topic first.");
         return;
       }
   
@@ -144,24 +153,23 @@ const [bulkJson, setBulkJson] = useState('');
       const { error } = await supabase.from('questions').insert(payload);
   
       if (!error) {
-        alert('✅ Bulk questions saved!');
+        showMessage('✅ Bulk questions saved!');
         setBulkJson('');
       } else {
         console.error(error);
-        alert('❌ Failed to save questions.');
+        showMessage('❌ Failed to save questions.');
       }
     } catch (err) {
-      alert('❌ Invalid JSON format.');
+      showMessage('❌ Invalid JSON format.');
     }
   };
   
 
   const handleSubmitQuestion = async () => {
+    setLoading(true);
     const res = await fetch('/api/save-quiz', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         subject: selectedSubject,
         topic: topicName,
@@ -174,9 +182,10 @@ const [bulkJson, setBulkJson] = useState('');
     });
   
     const result = await res.json();
+    setLoading(false);
   
     if (result.success) {
-      alert('✅ Question saved!');
+      showMessage('✅ Question saved!');
       setQuestion('');
       setAnswer('');
       setNote('');
@@ -184,7 +193,7 @@ const [bulkJson, setBulkJson] = useState('');
       setImageAfter(null);
       setTopicName('');
     } else {
-      alert(`❌ Error: ${result.error}`);
+      showMessage(`❌ Error: ${result.error}`);
     }
   };
   
@@ -200,7 +209,7 @@ const [bulkJson, setBulkJson] = useState('');
 
     if (!error) {
       setTopicName('');
-      alert('Topic added ✅');
+      showMessage('Topic added ✅');
     }
   };
 
@@ -225,13 +234,18 @@ const [bulkJson, setBulkJson] = useState('');
       if (type === 'before') setImageBefore(result.url);
       else setImageAfter(result.url);
     } else {
-      alert('❌ Image upload failed.');
+      showMessage('❌ Image upload failed.');
     }
   };
   
 
   return (
     <main className="p-4 max-w-md mx-auto">
+        {message && (
+  <div className="mb-4 p-2 rounded text-white bg-black text-sm text-center shadow">
+    {message}
+  </div>
+)}
       <h1 className="text-2xl font-bold mb-4 text-center">Admin Panel</h1>
 
       <Link href="/" className="inline-block mb-4">
@@ -366,13 +380,13 @@ const [bulkJson, setBulkJson] = useState('');
     <div className="flex gap-2 mb-4 justify-center">
       <button
         onClick={() => setInputMode('form')}
-        className={`px-4 py-1 rounded ${inputMode === 'form' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+        className={`px-4 py-1 rounded ${inputMode === 'form' ? 'bg-blue-600 text-white' : 'bg-gray-500'}`}
       >
         Manual Form
       </button>
       <button
         onClick={() => setInputMode('json')}
-        className={`px-4 py-1 rounded ${inputMode === 'json' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}
+        className={`px-4 py-1 rounded ${inputMode === 'json' ? 'bg-green-600 text-white' : 'bg-gray-500'}`}
       >
         Bulk JSON Input
       </button>
@@ -412,11 +426,14 @@ const [bulkJson, setBulkJson] = useState('');
         {imageAfter && <img src={imageAfter} alt="after" className="mb-4 rounded w-full max-h-40 object-contain border" />}
 
         <button
-          onClick={handleSubmitQuestion}
-          className="w-full bg-yellow-600 text-white py-2 rounded hover:bg-yellow-500"
-        >
-          Save Question
-        </button>
+  onClick={handleSubmitQuestion}
+  disabled={loading}
+  className={`w-full py-2 rounded hover:bg-yellow-500 ${
+    loading ? 'bg-yellow-300 cursor-not-allowed' : 'bg-yellow-600 text-white'
+  }`}
+>
+  {loading ? 'Saving...' : 'Save Question'}
+</button>
       </>
     )}
 
@@ -527,10 +544,10 @@ const [bulkJson, setBulkJson] = useState('');
               .eq('id', q.id);
 
             if (!error) {
-              alert('🗑️ Question deleted');
+              showMessage('🗑️ Question deleted');
               setQuestions((prev) => prev.filter((item) => item.id !== q.id));
             } else {
-              alert('❌ Delete failed');
+              showMessage('❌ Delete failed');
             }
           }}
           className="w-full bg-red-600 text-white py-1 rounded text-sm"
