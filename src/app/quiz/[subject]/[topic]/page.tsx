@@ -133,8 +133,16 @@ export default function QuizPage() {
   />
 )}
 
-      <h2 className="text-lg font-semibold mb-4">Question {currentIndex + 1}</h2>
-      <p className="mb-4">{questions[currentIndex].question}</p>
+<h2 className="text-lg font-semibold mb-2">Question {currentIndex + 1}</h2>
+<p className="mb-2">{questions[currentIndex].question}</p>
+
+{/* Show expected count of answers */}
+{(
+  <p className="text-sm text-gray-600 mb-4">
+    (Total answer expected comma seperated: {questions[currentIndex].answer.split(',').length})
+  </p>
+)}
+
 
       {!hasSubmitted && (
         <>
