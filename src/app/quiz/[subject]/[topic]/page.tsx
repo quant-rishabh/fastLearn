@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { isFuzzyMatch } from '@/utils/fuzzyMatch';
+import { isFuzzyMatchArray } from '@/utils/fuzzyMatch';
 import Link from 'next/link';
 
 interface Question {
@@ -36,36 +36,23 @@ export default function QuizPage() {
 
   const handleSubmit = () => {
     const correctAnswer = questions[currentIndex]?.answer;
-    const threshold = fuzzyThreshold;
-  
-    const answers = userAnswer
-      .split(',')
-      .map((a) => a.trim().toLowerCase());
   
     const expectedAnswers = correctAnswer
       .split(',')
-      .map((a) => a.trim().toLowerCase());
+      .map((a) => a.trim().toLowerCase())
+      .filter(Boolean);
   
-    let allMatched = true;
+    const userInputs = userAnswer
+      .split(',')
+      .map((a) => a.trim().toLowerCase())
+      .filter(Boolean);
   
-    for (const answer of answers) {
-      let matched = false;
-  
-      for (const expected of expectedAnswers) {
-        if (isFuzzyMatch(answer, expected, threshold)) {
-          matched = true;
-          break;
-        }
-      }
-  
-      if (!matched) {
-        allMatched = false;
-        break;
-      }
+    if (userInputs.length === 0) {
+      alert("⚠️ Please enter your answer.");
+      return;
     }
   
-    const sameLength = answers.length === expectedAnswers.length;
-    const isMatch = allMatched && sameLength;
+    const isMatch = isFuzzyMatchArray(userInputs, expectedAnswers, 0.4); // fixed threshold
   
     setIsCorrect(isMatch);
     setHasSubmitted(true);
@@ -73,6 +60,7 @@ export default function QuizPage() {
       setScore((prev) => prev + 1);
     }
   };
+  
   
   
   
@@ -108,21 +96,6 @@ export default function QuizPage() {
         <Link href="/" className="text-blue-600 underline text-sm mb-4 inline-block">
   ← Back to Home
 </Link>
-
-<div className="mb-4">
-  <label className="block text-sm font-medium mb-1">
-    Fuzzy Match Threshold: {fuzzyThreshold}%
-  </label>
-  <input
-    type="range"
-    min={50}
-    max={100}
-    step={1}
-    value={fuzzyThreshold}
-    onChange={(e) => setFuzzyThreshold(Number(e.target.value))}
-    className="w-full"
-  />
-</div>
 
 
 {questions[currentIndex].image_before && !hasSubmitted && (

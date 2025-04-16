@@ -1,16 +1,24 @@
-import fuzzysort from 'fuzzysort';
+import Fuse from 'fuse.js';
 
-export function isFuzzyMatch(userInput: string, correctAnswer: string, threshold = 80): boolean {
-    const result = fuzzysort.single(userInput.toLowerCase(), correctAnswer.toLowerCase());
-  
-    if (!result || result.score == null) {
-      console.log(`[Fuzzy ❌] "${userInput}" vs "${correctAnswer}" → No match`);
-      return false;
+export function isFuzzyMatchArray(
+  userInputs: string[],
+  expectedAnswers: string[],
+  threshold = 0.4 // lower = stricter
+): boolean {
+  const fuse = new Fuse(expectedAnswers, {
+    includeScore: true,
+    threshold, // range: 0.0 (perfect match) to 1.0 (match anything)
+  });
+
+  const matched = new Set();
+
+  for (const input of userInputs) {
+    const result = fuse.search(input.trim().toLowerCase());
+
+    if (result.length > 0 && !matched.has(result[0].item)) {
+      matched.add(result[0].item);
     }
-  
-    const percent = Math.max(0, 100 + result.score * 2);
-    console.log(`[Fuzzy 🔍] "${userInput}" vs "${correctAnswer}" → Score: ${percent.toFixed(1)}% (Threshold: ${threshold}%)`);
-  
-    return percent >= threshold;
   }
-  
+
+  return matched.size === expectedAnswers.length;
+}
