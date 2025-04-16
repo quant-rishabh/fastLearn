@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { isFuzzyMatchArray } from '@/utils/fuzzyMatch';
 import Link from 'next/link';
+import { useRef } from 'react';
+
 
 interface Question {
   question: string;
@@ -12,6 +14,7 @@ interface Question {
   image_before?: string;
   image_after?: string;
 }
+
 
 export default function QuizPage() {
   const { subject, topic } = useParams();
@@ -23,6 +26,9 @@ export default function QuizPage() {
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [fuzzyThreshold, setFuzzyThreshold] = useState(80); // default 80%
+
+  const inputRef = useRef<HTMLInputElement>(null);
+
 
 
   useEffect(() => {
@@ -70,6 +76,9 @@ export default function QuizPage() {
       setUserAnswer('');
       setHasSubmitted(false);
       setIsCorrect(null);
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
     } else {
       setFinished(true);
     }
@@ -107,6 +116,9 @@ export default function QuizPage() {
 )}
 
 <h2 className="text-lg font-semibold mb-2">Question {currentIndex + 1}</h2>
+<p className="text-sm text-gray-600 mb-4">
+  Question {currentIndex + 1} of {questions.length}
+</p>
 <p className="mb-2">{questions[currentIndex].question}</p>
 
 {/* Show expected count of answers */}
@@ -119,13 +131,14 @@ export default function QuizPage() {
 
       {!hasSubmitted && (
         <>
-          <input
-            type="text"
-            value={userAnswer}
-            onChange={(e) => setUserAnswer(e.target.value)}
-            placeholder="Type all answers, separated by commas"
-            className="w-full p-2 border rounded mb-4"
-          />
+         <input
+  ref={inputRef}
+  type="text"
+  value={userAnswer}
+  onChange={(e) => setUserAnswer(e.target.value)}
+  placeholder="Type all answers, separated by commas"
+  className="w-full p-2 border rounded mb-4"
+/>
 
           <button
             onClick={handleSubmit}
