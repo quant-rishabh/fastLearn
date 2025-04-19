@@ -25,9 +25,16 @@ export default function QuizPage() {
   const [finished, setFinished] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
-  const [fuzzyThreshold, setFuzzyThreshold] = useState(80); // default 80%
+
+  const [threshold, setThreshold] = useState<number>(() => {
+    const stored = localStorage.getItem('fuzzy_threshold');
+    return stored ? Number(stored) : 0.3; 
+  });
+  
 
   const inputRef = useRef<HTMLInputElement>(null);
+
+
 
 
 
@@ -65,8 +72,8 @@ export default function QuizPage() {
       alert("⚠️ Please enter your answer.");
       return;
     }
-  
-    const isMatch = isFuzzyMatchArray(userInputs, expectedAnswers, 0.4); // fixed threshold
+    const savedThreshold = Number(localStorage.getItem('fuzzy_threshold') || '0.4');
+    const isMatch = isFuzzyMatchArray(userInputs, expectedAnswers, savedThreshold);
   
     setIsCorrect(isMatch);
     setHasSubmitted(true);
@@ -113,6 +120,30 @@ export default function QuizPage() {
         <Link href="/" className="text-blue-600 underline text-sm mb-4 inline-block">
   ← Back to Home
 </Link>
+
+<div className="mb-4">
+  <label className="block text-sm font-medium mb-1 text-white">
+    Set Fuzzy Match Threshold (0 = strictest, 1 = most lenient)
+  </label>
+  <div className="flex gap-2">
+    <input
+      type="number"
+      min={0}
+      max={1}
+      step={0.01}
+      value={threshold}
+      onChange={(e) => setThreshold(Number(e.target.value))}
+      className="w-28 p-2 border rounded text-white bg-gray-800"
+    />
+    <button
+      onClick={() => localStorage.setItem('fuzzy_threshold', threshold.toString())}
+      className="px-3 py-2 bg-gray-800 text-white rounded hover:bg-gray-700"
+    >
+      Save
+    </button>
+  </div>
+</div>
+
 
 
 {questions[currentIndex].image_before && !hasSubmitted && (
