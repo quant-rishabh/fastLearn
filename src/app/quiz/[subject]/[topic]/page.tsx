@@ -31,11 +31,19 @@ export default function QuizPage() {
 
 
 
+  function shuffleArray<T>(array: T[]): T[] {
+    return array
+      .map(value => ({ value, sort: Math.random() }))
+      .sort((a, b) => a.sort - b.sort)
+      .map(({ value }) => value);
+  }
+  
   useEffect(() => {
     const loadQuiz = async () => {
-        const res = await fetch(`/api/get-quiz?subject=${subject}&topic=${decodeURIComponent(topic as string)}`);
-        const { questions } = await res.json();
-        setQuestions(questions || []);
+      const res = await fetch(`/api/get-quiz?subject=${subject}&topic=${decodeURIComponent(topic as string)}`);
+      const { questions } = await res.json();
+      const shuffled = shuffleArray(questions || []) as Question[];
+      setQuestions((questions || []).sort(() => Math.random() - 0.5));
     };
     loadQuiz();
   }, [subject, topic]);
@@ -108,11 +116,15 @@ export default function QuizPage() {
 
 
 {questions[currentIndex].image_before && !hasSubmitted && (
-  <img
-    src={questions[currentIndex].image_before}
-    alt="Question Visual"
-    className="mb-4 rounded w-full max-h-48 object-contain border"
-  />
+  <div className="mb-4">
+    <img
+      src={questions[currentIndex].image_before}
+      alt="Question Visual"
+      className="w-full h-auto max-h-[90vh] object-contain border rounded cursor-pointer"
+      onClick={() => window.open(questions[currentIndex].image_before, '_blank')}
+    />
+    <p className="text-xs text-center text-gray-500 mt-1">Click to open full image</p>
+  </div>
 )}
 
 <h2 className="text-lg font-semibold mb-2">Question {currentIndex + 1}</h2>
@@ -171,12 +183,16 @@ export default function QuizPage() {
       )}
     </div>
 
-    {questions[currentIndex].image_after && (
-  <img
-    src={questions[currentIndex].image_after}
-    alt="Explanation Visual"
-    className="mt-4 rounded w-full max-h-48 object-contain border"
-  />
+    {questions[currentIndex].image_after && hasSubmitted && (
+  <div className="mt-4">
+    <img
+      src={questions[currentIndex].image_after}
+      alt="Answer Visual"
+      className="w-full h-auto max-h-[90vh] object-contain border rounded cursor-pointer"
+      onClick={() => window.open(questions[currentIndex].image_after, '_blank')}
+    />
+    <p className="text-xs text-center text-gray-500 mt-1">Click to open full image</p>
+  </div>
 )}
 
     <button

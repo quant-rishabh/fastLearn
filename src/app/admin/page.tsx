@@ -71,6 +71,66 @@ const showMessage = (msg: string, duration = 3000) => {
   }, []);
 
   useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const clipboardItems = e.clipboardData?.items;
+      if (!clipboardItems) return;
+  
+      for (const item of clipboardItems) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (!file) return;
+  
+          const formData = new FormData();
+          formData.append('file', file);
+  
+          // Create popup container
+          const container = document.createElement('div');
+          container.className = 'fixed inset-0 flex items-center justify-center z-50';
+          container.innerHTML = `
+            <div class="bg-white text-black border shadow-xl rounded-lg p-6 max-w-sm w-full text-center">
+              <p class="text-base font-semibold mb-4">Where do you want to use this image?</p>
+              <div class="flex gap-4 justify-center">
+                <button id="img-before" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">Question Image</button>
+                <button id="img-after" class="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">Answer Image</button>
+              </div>
+            </div>
+          `;
+  
+          document.body.appendChild(container);
+  
+          const removePopup = () => container.remove();
+  
+          document.getElementById('img-before')?.addEventListener('click', async () => {
+            const res = await fetch('/api/upload-image', {
+              method: 'POST',
+              body: formData,
+            });
+            const result = await res.json();
+            if (result.url) setImageBefore(result.url);
+            removePopup();
+          });
+  
+          document.getElementById('img-after')?.addEventListener('click', async () => {
+            const res = await fetch('/api/upload-image', {
+              method: 'POST',
+              body: formData,
+            });
+            const result = await res.json();
+            if (result.url) setImageAfter(result.url);
+            removePopup();
+          });
+  
+          break;
+        }
+      }
+    };
+  
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, []);
+  
+
+  useEffect(() => {
     const fetchTopics = async () => {
       const subject = subjects.find((s) => s.slug === selectedSubject);
       if (!subject) return;
