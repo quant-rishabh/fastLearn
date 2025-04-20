@@ -30,6 +30,10 @@ export default function QuizPage() {
     const stored = localStorage.getItem('fuzzy_threshold');
     return stored ? Number(stored) : 0.3; 
   });
+
+  const [wrongAnswers, setWrongAnswers] = useState<
+  { question: string; correct: string; user: string; note?: string }[]
+>([]);
   
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -74,12 +78,24 @@ export default function QuizPage() {
     }
     const savedThreshold = Number(localStorage.getItem('fuzzy_threshold') || '0.4');
     const isMatch = isFuzzyMatchArray(userInputs, expectedAnswers, savedThreshold);
-  
-    setIsCorrect(isMatch);
-    setHasSubmitted(true);
-    if (isMatch) {
-      setScore((prev) => prev + 1);
-    }
+
+setIsCorrect(isMatch);
+setHasSubmitted(true);
+
+if (isMatch) {
+  setScore((prev) => prev + 1);
+} else {
+    setWrongAnswers((prev) => [
+        ...prev,
+        {
+          question: questions[currentIndex].question,
+          correct: questions[currentIndex].answer,
+          user: userAnswer.trim(),
+          note: questions[currentIndex].note || '',
+        },
+      ]);
+      
+}
   };
   
   
@@ -111,6 +127,22 @@ export default function QuizPage() {
 </Link>
         <h2 className="text-2xl font-bold mb-4">Quiz Finished 🎉</h2>
         <p>You got {score} out of {questions.length} correct.</p>
+
+        {wrongAnswers.length > 0 && (
+  <div className="mt-6 text-left">
+    <h3 className="text-lg font-semibold mb-2">❌ Questions You Got Wrong:</h3>
+    {wrongAnswers.map((item, idx) => (
+  <div key={idx} className="mb-4 p-3 bg-red-50 border text-black rounded">
+    <p><strong>Q:</strong> {item.question}</p>
+    <p><strong>Your Answer:</strong> {item.user}</p>
+    <p><strong>Correct Answer:</strong> {item.correct}</p>
+    {item.note && (
+      <p><strong>Note:</strong> {item.note}</p>
+    )}
+  </div>
+))}
+  </div>
+)}
       </main>
     );
   }
