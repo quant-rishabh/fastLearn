@@ -52,12 +52,22 @@ export default function QuizPage() {
   
       if (!fetchFromDb) {
         const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-          setQuestions(JSON.parse(cached));
-          return;
+        if (cached && cached !== 'undefined') {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed)) {
+              setQuestions(parsed);
+              return;
+            } else {
+              console.warn('⚠️ Cached quiz is not an array, ignoring.');
+            }
+          } catch (e) {
+            console.error('❌ Failed to parse cached quiz:', e);
+          }
         }
       }
   
+      // fallback to DB/API
       const res = await fetch(`/api/get-quiz?subject=${subject}&topic=${decodeURIComponent(topic as string)}`);
       const { questions } = await res.json();
   
@@ -65,24 +75,24 @@ export default function QuizPage() {
       const finalQuestions = shuffleEnabled ? questions.sort(() => Math.random() - 0.5) : questions;
   
       setQuestions(finalQuestions);
-      localStorage.setItem(cacheKey, JSON.stringify(finalQuestions));
+      localStorage.setItem(cacheKey, JSON.stringify(finalQuestions || []));
     };
   
     loadQuiz();
-  }, [subject, topic]);
+  }, [subject, topic]);  
 
 const spokenIndexRef = useRef<number | null>(null);
 
 useEffect(() => {
   const speakSetting = localStorage.getItem('auto_speak');
-  const currentQuestion = questions[currentIndex];
 
   if (
     speakSetting === 'true' &&
-    currentQuestion?.question &&
+    questions?.length > 0 &&
+    questions[currentIndex]?.question &&
     spokenIndexRef.current !== currentIndex
   ) {
-    speakQuestionAloud(currentQuestion.question);
+    speakQuestionAloud(questions[currentIndex].question);
     spokenIndexRef.current = currentIndex;
   }
 }, [currentIndex, questions]);
@@ -129,13 +139,15 @@ if (isMatch) {
 
   function speakQuestionAloud(text: string) {
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-IN'; // Indian English accent
+  
+    // Check if text contains any Hindi (Devanagari) characters
+    const isHindi = /[\u0900-\u097F]/.test(text);
+    utterance.lang = isHindi ? 'hi-IN' : 'en-IN';
+  
     utterance.rate = 1.05;
     speechSynthesis.speak(utterance);
   }
-  
-  
-  
+
   
   const handleNext = () => {
     if (currentIndex + 1 < questions.length) {
@@ -151,7 +163,7 @@ if (isMatch) {
     }
   };
 
-  if (!questions.length) {
+  if (!Array.isArray(questions) || questions.length === 0)  {
     return <p className="p-4">Loading quiz...</p>;
   }
 

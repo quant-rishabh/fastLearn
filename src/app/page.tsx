@@ -226,6 +226,20 @@ const handleToggleDbFetch = (val: boolean) => {
         📖 Learn
       </button>
     </Link>
+
+    <button
+  onClick={() => {
+    if (confirm('⚠️ Are you sure you want to clear all cached data? This cannot be undone.')) {
+      localStorage.clear();
+      alert('🧹 LocalStorage cleared!');
+      location.reload(); // reload the page to refresh UI
+    }
+  }}
+  className="w-full mt-2 bg-red-600 text-white py-2 rounded hover:bg-red-500"
+>
+  🧹 Clear Local Storage
+</button>
+
   </div>
 )}
 

@@ -59,7 +59,7 @@ const showMessage = (msg: string, duration = 3000) => {
 
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<'subject' | 'topic' | 'question' | 'edit'>('subject');
+  const [activeTab, setActiveTab] = useState<'subject' | 'topic' | 'question' | 'edit' | 'deleteTopic'>('subject');
 
   // Load subjects for dropdowns
   useEffect(() => {
@@ -340,6 +340,12 @@ const showMessage = (msg: string, duration = 3000) => {
   >
     Edit Questions
   </button>
+  <button
+    onClick={() => setActiveTab('deleteTopic')}
+    className={`px-4 py-2 rounded border ${activeTab === 'deleteTopic' ? 'bg-purple-600 text-white' : 'bg-white text-gray-800 hover:bg-purple-100'}`}
+  >
+    Delete Topic
+  </button>
 </div>
 
 
@@ -401,6 +407,8 @@ const showMessage = (msg: string, duration = 3000) => {
           >
             Add Topic
           </button>
+
+          
         </div>
       )}
 
@@ -517,6 +525,86 @@ const showMessage = (msg: string, duration = 3000) => {
     )}
   </div>
 )}
+
+{activeTab === 'deleteTopic' && (
+  <div className="mb-6">
+    <h2 className="text-lg font-semibold mb-2 text-red-600">🗑️ Delete Topic & All Questions</h2>
+
+    <select
+      value={selectedSubject}
+      onChange={(e) => {
+        setSelectedSubject(e.target.value);
+        setTopicName('');
+      }}
+      className="w-full p-2 border rounded mb-2"
+    >
+      <option value="">-- Select Subject --</option>
+      {subjects.map((s) => (
+        <option key={s.id} value={s.slug}>
+          {s.label}
+        </option>
+      ))}
+    </select>
+
+    <select
+      value={topicName}
+      onChange={(e) => setTopicName(e.target.value)}
+      className="w-full p-2 border rounded mb-4"
+    >
+      <option value="">-- Select Topic --</option>
+      {topics.map((t) => (
+        <option key={t.id} value={t.name}>
+          {t.name}
+        </option>
+      ))}
+    </select>
+
+    <button
+      onClick={async () => {
+        const subject = subjects.find((s) => s.slug === selectedSubject);
+        const topic = topics.find((t) => t.name === topicName);
+
+        if (!subject || !topic) {
+          showMessage('❌ Select both subject and topic');
+          return;
+        }
+
+        const confirmed = confirm(`Are you sure you want to delete topic "${topic.name}" and all its questions?`);
+        if (!confirmed) return;
+
+        const { error: qError } = await supabase
+          .from('questions')
+          .delete()
+          .eq('topic_id', topic.id);
+
+        const { error: tError } = await supabase
+          .from('topics')
+          .delete()
+          .eq('id', topic.id);
+
+        if (!qError && !tError) {
+          showMessage('🗑️ Topic and its questions deleted');
+          setTopicName('');
+
+          const { data: updatedTopics } = await supabase
+            .from('topics')
+            .select('*')
+            .eq('subject_id', subject.id);
+          setTopics(updatedTopics || []);
+
+          localStorage.removeItem(`quiz_${selectedSubject}_${encodeURIComponent(topic.name)}`);
+        } else {
+          showMessage('❌ Delete failed');
+          console.error({ qError, tError });
+        }
+      }}
+      className="w-full bg-red-600 text-white py-2 rounded hover:bg-red-500"
+    >
+      Delete Topic & All Questions
+    </button>
+  </div>
+)}
+
 
 
 
