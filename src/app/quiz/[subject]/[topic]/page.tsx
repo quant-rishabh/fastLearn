@@ -61,6 +61,22 @@ useEffect(() => {
   loadQuiz();
 }, [subject, topic]);
 
+const spokenIndexRef = useRef<number | null>(null);
+
+useEffect(() => {
+  const speakSetting = localStorage.getItem('auto_speak');
+  const currentQuestion = questions[currentIndex];
+
+  if (
+    speakSetting === 'true' &&
+    currentQuestion?.question &&
+    spokenIndexRef.current !== currentIndex
+  ) {
+    speakQuestionAloud(currentQuestion.question);
+    spokenIndexRef.current = currentIndex;
+  }
+}, [currentIndex, questions]);
+
 
   const handleSubmit = () => {
     const correctAnswer = questions[currentIndex]?.answer;
@@ -100,6 +116,13 @@ if (isMatch) {
       
 }
   };
+
+  function speakQuestionAloud(text: string) {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-IN'; // Indian English accent
+    utterance.rate = 1.3;
+    speechSynthesis.speak(utterance);
+  }
   
   
   
@@ -173,7 +196,16 @@ if (isMatch) {
 <p className="text-sm text-gray-600 mb-4">
   Question {currentIndex + 1} of {questions.length}
 </p>
-<p className="mb-2">{questions[currentIndex].question}</p>
+<div className="mb-2 flex items-center gap-2">
+  <p className="flex-1">{questions[currentIndex].question}</p>
+  <button
+    onClick={() => speakQuestionAloud(questions[currentIndex].question)}
+    className="text-blue-600 hover:text-blue-800"
+    title="Listen to question"
+  >
+    🔊
+  </button>
+</div>
 
 {/* Show expected count of answers */}
 {(

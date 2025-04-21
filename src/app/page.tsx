@@ -24,6 +24,16 @@ export default function Home() {
 
   const [threshold, setThreshold] = useState(0.3); // default
   const [shuffleEnabled, setShuffleEnabled] = useState(false);
+
+
+  const [autoSpeak, setAutoSpeak] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('auto_speak');
+    if (saved !== null) {
+      setAutoSpeak(saved === 'true');
+    }
+  }, []);
   
   useEffect(() => {
     const storedThreshold = localStorage.getItem('fuzzy_threshold');
@@ -68,8 +78,10 @@ export default function Home() {
   const handleSaveSettings = () => {
     localStorage.setItem('fuzzy_threshold', threshold.toString());
     localStorage.setItem('shuffle_enabled', shuffleEnabled.toString());
+    localStorage.setItem('auto_speak', String(autoSpeak)); // moved here
     alert('✅ Settings saved!');
   };
+
 
   return (
     <main className="p-4 max-w-md mx-auto">
@@ -107,6 +119,15 @@ export default function Home() {
           />
           <span className="ml-2 text-gray-600 text-sm">{shuffleEnabled ? 'Enabled' : 'Disabled'}</span>
         </div>
+
+        <label className="flex items-center gap-2 mt-4">
+  <input
+    type="checkbox"
+    checked={autoSpeak}
+    onChange={(e) => setAutoSpeak(e.target.checked)}
+  />
+  Auto Speak Question on Load
+</label>
 
         <button
           onClick={handleSaveSettings}
