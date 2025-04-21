@@ -120,7 +120,7 @@ if (isMatch) {
   function speakQuestionAloud(text: string) {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'en-IN'; // Indian English accent
-    utterance.rate = 1.3;
+    utterance.rate = 1.15;
     speechSynthesis.speak(utterance);
   }
   
