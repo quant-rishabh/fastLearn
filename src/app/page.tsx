@@ -22,7 +22,18 @@ export default function Home() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [topicName, setTopicName] = useState('');
 
-  // Load all subjects from Supabase
+  const [threshold, setThreshold] = useState(0.3); // default
+  const [shuffleEnabled, setShuffleEnabled] = useState(false);
+  
+  useEffect(() => {
+    const storedThreshold = localStorage.getItem('fuzzy_threshold');
+    const storedShuffle = localStorage.getItem('shuffle_enabled');
+  
+    if (storedThreshold) setThreshold(parseFloat(storedThreshold));
+    if (storedShuffle) setShuffleEnabled(storedShuffle === 'true');
+  }, []);
+
+  // Load subjects
   useEffect(() => {
     const loadSubjects = async () => {
       const { data, error } = await supabase.from('subjects').select('*');
@@ -33,7 +44,7 @@ export default function Home() {
     loadSubjects();
   }, []);
 
-  // Load topics when a subject is selected
+  // Load topics for selected subject
   useEffect(() => {
     const fetchTopics = async () => {
       if (!subjectSlug) return;
@@ -54,17 +65,59 @@ export default function Home() {
     fetchTopics();
   }, [subjectSlug, subjects]);
 
+  const handleSaveSettings = () => {
+    localStorage.setItem('fuzzy_threshold', threshold.toString());
+    localStorage.setItem('shuffle_enabled', shuffleEnabled.toString());
+    alert('✅ Settings saved!');
+  };
+
   return (
     <main className="p-4 max-w-md mx-auto">
-      <h1 className="text-xl font-bold mb-4">Quick Learn Quiz</h1>
+      <h1 className="text-xl font-bold mb-4">⚡ Quick Learn Quiz</h1>
 
       <Link href="/admin">
-  <button className="w-full mt-6 bg-gray-800 text-white py-2 rounded hover:bg-gray-700">
-    Admin Panel
-  </button>
-</Link>
+        <button className="w-full mt-4 mb-6 bg-gray-800 text-white py-2 rounded hover:bg-gray-700">
+          Admin Panel
+        </button>
+      </Link>
 
-      <label className="block mb-2">Select Subject:</label>
+      {/* Settings */}
+      <div className="mb-6 border p-4 rounded bg-black-500">
+        <h2 className="text-md font-semibold mb-3">⚙️ Settings</h2>
+
+        <label className="block text-sm mb-1">
+          Set Fuzzy Match Threshold (0 = strict, 1 = lenient)
+        </label>
+        <input
+          type="number"
+          min={0}
+          max={1}
+          step={0.01}
+          value={threshold}
+          onChange={(e) => setThreshold(parseFloat(e.target.value))}
+          className="w-full p-2 border rounded mb-4"
+        />
+
+        <div className="mb-3">
+          <label className="text-sm mr-2">Shuffle Questions:</label>
+          <input
+            type="checkbox"
+            checked={shuffleEnabled}
+            onChange={(e) => setShuffleEnabled(e.target.checked)}
+          />
+          <span className="ml-2 text-gray-600 text-sm">{shuffleEnabled ? 'Enabled' : 'Disabled'}</span>
+        </div>
+
+        <button
+          onClick={handleSaveSettings}
+          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-500"
+        >
+          Save Settings
+        </button>
+      </div>
+
+      {/* Subject Dropdown */}
+      <label className="block mb-2">📘 Select Subject:</label>
       <select
         value={subjectSlug}
         onChange={(e) => setSubjectSlug(e.target.value)}
@@ -78,9 +131,10 @@ export default function Home() {
         ))}
       </select>
 
+      {/* Topic Dropdown */}
       {topics.length > 0 && (
         <>
-          <label className="block mb-2">Select Topic:</label>
+          <label className="block mb-2">📚 Select Topic:</label>
           <select
             value={topicName}
             onChange={(e) => setTopicName(e.target.value)}
@@ -96,6 +150,7 @@ export default function Home() {
         </>
       )}
 
+      {/* Start Quiz */}
       {subjectSlug && topicName && (
         <Link href={`/quiz/${subjectSlug}/${encodeURIComponent(topicName)}`}>
           <button className="w-full bg-black text-white py-2 rounded">

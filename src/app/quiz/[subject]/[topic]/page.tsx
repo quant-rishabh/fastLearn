@@ -25,16 +25,11 @@ export default function QuizPage() {
   const [finished, setFinished] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
-
-  const [threshold, setThreshold] = useState<number>(() => {
-    const stored = localStorage.getItem('fuzzy_threshold');
-    return stored ? Number(stored) : 0.3; 
-  });
-
   const [wrongAnswers, setWrongAnswers] = useState<
   { question: string; correct: string; user: string; note?: string }[]
 >([]);
   
+
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -48,16 +43,24 @@ export default function QuizPage() {
       .sort((a, b) => a.sort - b.sort)
       .map(({ value }) => value);
   }
+
   
-  useEffect(() => {
-    const loadQuiz = async () => {
-      const res = await fetch(`/api/get-quiz?subject=${subject}&topic=${decodeURIComponent(topic as string)}`);
-      const { questions } = await res.json();
-      const shuffled = shuffleArray(questions || []) as Question[];
-      setQuestions((questions || []).sort(() => Math.random() - 0.5));
-    };
-    loadQuiz();
-  }, [subject, topic]);
+useEffect(() => {
+  const loadQuiz = async () => {
+    const res = await fetch(`/api/get-quiz?subject=${subject}&topic=${decodeURIComponent(topic as string)}`);
+    const { questions } = await res.json();
+    
+    const shuffleEnabled = localStorage.getItem('shuffle_enabled') === 'true';
+
+    const finalQuestions = shuffleEnabled
+      ? (questions || []).sort(() => Math.random() - 0.5)
+      : (questions || []);
+
+    setQuestions(finalQuestions);
+  };
+  loadQuiz();
+}, [subject, topic]);
+
 
   const handleSubmit = () => {
     const correctAnswer = questions[currentIndex]?.answer;
@@ -152,30 +155,6 @@ if (isMatch) {
         <Link href="/" className="text-blue-600 underline text-sm mb-4 inline-block">
   ← Back to Home
 </Link>
-
-<div className="mb-4">
-  <label className="block text-sm font-medium mb-1 text-white">
-    Set Fuzzy Match Threshold (0 = strictest, 1 = most lenient)
-  </label>
-  <div className="flex gap-2">
-    <input
-      type="number"
-      min={0}
-      max={1}
-      step={0.01}
-      value={threshold}
-      onChange={(e) => setThreshold(Number(e.target.value))}
-      className="w-28 p-2 border rounded text-white bg-gray-800"
-    />
-    <button
-      onClick={() => localStorage.setItem('fuzzy_threshold', threshold.toString())}
-      className="px-3 py-2 bg-gray-800 text-white rounded hover:bg-gray-700"
-    >
-      Save
-    </button>
-  </div>
-</div>
-
 
 
 {questions[currentIndex].image_before && !hasSubmitted && (
