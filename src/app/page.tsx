@@ -27,6 +27,17 @@ export default function Home() {
 
 
   const [autoSpeak, setAutoSpeak] = useState(false);
+  const [fetchFromDb, setFetchFromDb] = useState(true); // default: true
+
+useEffect(() => {
+  const stored = localStorage.getItem('fetch_from_db');
+  if (stored) setFetchFromDb(stored === 'true');
+}, []);
+
+const handleToggleDbFetch = (val: boolean) => {
+  setFetchFromDb(val);
+  localStorage.setItem('fetch_from_db', String(val));
+};
 
   useEffect(() => {
     const saved = localStorage.getItem('auto_speak');
@@ -46,13 +57,22 @@ export default function Home() {
   // Load subjects
   useEffect(() => {
     const loadSubjects = async () => {
+      if (!fetchFromDb) {
+        const cached = localStorage.getItem('subjects');
+        if (cached && cached !== 'undefined') {
+          setSubjects(JSON.parse(cached));
+          return;
+        }
+      }
+  
       const { data, error } = await supabase.from('subjects').select('*');
       if (!error && data) {
         setSubjects(data);
+        localStorage.setItem('subjects', JSON.stringify(data));
       }
     };
     loadSubjects();
-  }, []);
+  }, [fetchFromDb]);
 
   // Load topics for selected subject
   useEffect(() => {
@@ -60,20 +80,31 @@ export default function Home() {
       if (!subjectSlug) return;
       const subject = subjects.find((s) => s.slug === subjectSlug);
       if (!subject) return;
-
+  
+      const cacheKey = `topics_${subject.id}`;
+  
+      if (fetchFromDb === false) {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached && cached !== 'undefined')  {
+          setTopics(JSON.parse(cached));
+          return;
+        }
+      }
+  
       const { data, error } = await supabase
         .from('topics')
         .select('*')
         .eq('subject_id', subject.id);
-
+  
       if (!error && data) {
         setTopics(data);
-        setTopicName('');
+        localStorage.setItem(cacheKey, JSON.stringify(data));
       }
     };
-
+  
     fetchTopics();
-  }, [subjectSlug, subjects]);
+  }, [subjectSlug, subjects, fetchFromDb]);
+  
 
   const handleSaveSettings = () => {
     localStorage.setItem('fuzzy_threshold', threshold.toString());
@@ -129,6 +160,15 @@ export default function Home() {
   Auto Speak Question on Load
 </label>
 
+<label className="flex items-center gap-2 mb-4">
+  <input
+    type="checkbox"
+    checked={fetchFromDb}
+    onChange={(e) => handleToggleDbFetch(e.target.checked)}
+  />
+  Fetch latest from DB (Overwrite cache)
+</label>
+
         <button
           onClick={handleSaveSettings}
           className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-500"
@@ -172,13 +212,24 @@ export default function Home() {
       )}
 
       {/* Start Quiz */}
+
+      
       {subjectSlug && topicName && (
-        <Link href={`/quiz/${subjectSlug}/${encodeURIComponent(topicName)}`}>
-          <button className="w-full bg-black text-white py-2 rounded">
-            Start Quiz
-          </button>
-        </Link>
-      )}
+  <div className="flex gap-4 mt-4">
+    <Link href={`/quiz/${subjectSlug}/${encodeURIComponent(topicName)}`}>
+      <button className="w-full bg-black text-white py-2 rounded hover:bg-gray-900">
+        ▶️ Start Quiz
+      </button>
+    </Link>
+    <Link href={`/learn/${subjectSlug}/${encodeURIComponent(topicName)}`}>
+      <button className="w-full bg-black text-white py-2 rounded hover:bg-gray-900">
+        📖 Learn
+      </button>
+    </Link>
+  </div>
+)}
+
+
     </main>
   );
 }

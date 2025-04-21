@@ -45,21 +45,31 @@ export default function QuizPage() {
   }
 
   
-useEffect(() => {
-  const loadQuiz = async () => {
-    const res = await fetch(`/api/get-quiz?subject=${subject}&topic=${decodeURIComponent(topic as string)}`);
-    const { questions } = await res.json();
-    
-    const shuffleEnabled = localStorage.getItem('shuffle_enabled') === 'true';
-
-    const finalQuestions = shuffleEnabled
-      ? (questions || []).sort(() => Math.random() - 0.5)
-      : (questions || []);
-
-    setQuestions(finalQuestions);
-  };
-  loadQuiz();
-}, [subject, topic]);
+  useEffect(() => {
+    const loadQuiz = async () => {
+      const cacheKey = `quiz_${subject}_${decodeURIComponent(topic as string)}`;
+      const fetchFromDb = localStorage.getItem('fetch_from_db') === 'true';
+  
+      if (!fetchFromDb) {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          setQuestions(JSON.parse(cached));
+          return;
+        }
+      }
+  
+      const res = await fetch(`/api/get-quiz?subject=${subject}&topic=${decodeURIComponent(topic as string)}`);
+      const { questions } = await res.json();
+  
+      const shuffleEnabled = localStorage.getItem('shuffle_enabled') === 'true';
+      const finalQuestions = shuffleEnabled ? questions.sort(() => Math.random() - 0.5) : questions;
+  
+      setQuestions(finalQuestions);
+      localStorage.setItem(cacheKey, JSON.stringify(finalQuestions));
+    };
+  
+    loadQuiz();
+  }, [subject, topic]);
 
 const spokenIndexRef = useRef<number | null>(null);
 
@@ -81,15 +91,15 @@ useEffect(() => {
   const handleSubmit = () => {
     const correctAnswer = questions[currentIndex]?.answer;
   
-    const expectedAnswers = correctAnswer
-      .split(',')
-      .map((a) => a.trim().toLowerCase())
-      .filter(Boolean);
-  
     const userInputs = userAnswer
-      .split(',')
-      .map((a) => a.trim().toLowerCase())
-      .filter(Boolean);
+    .split('@')
+    .map((a) => a.trim().toLowerCase())
+    .filter(Boolean);
+  
+  const expectedAnswers = correctAnswer
+    .split('@')
+    .map((a) => a.trim().toLowerCase())
+    .filter(Boolean);
   
     if (userInputs.length === 0) {
       alert("⚠️ Please enter your answer.");
@@ -120,7 +130,7 @@ if (isMatch) {
   function speakQuestionAloud(text: string) {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'en-IN'; // Indian English accent
-    utterance.rate = 1.15;
+    utterance.rate = 1.05;
     speechSynthesis.speak(utterance);
   }
   
@@ -210,7 +220,7 @@ if (isMatch) {
 {/* Show expected count of answers */}
 {(
   <p className="text-sm text-gray-600 mb-4">
-    (Total answer expected comma seperated: {questions[currentIndex].answer.split(',').length})
+    (Total answer expected comma seperated: {questions[currentIndex].answer.split('@').length})
   </p>
 )}
 
@@ -222,7 +232,7 @@ if (isMatch) {
   type="text"
   value={userAnswer}
   onChange={(e) => setUserAnswer(e.target.value)}
-  placeholder="Type all answers, separated by commas"
+  placeholder="Type all answers, separated by @"
   className="w-full p-2 border rounded mb-4"
 />
 
