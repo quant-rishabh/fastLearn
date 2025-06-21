@@ -4,6 +4,15 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/utils/supabase';
 
+// Toast for feedback
+function Toast({ message, show }: { message: string; show: boolean }) {
+  return show ? (
+    <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-black text-white px-4 py-2 rounded shadow-lg z-50 animate-fade-in">
+      {message}
+    </div>
+  ) : null;
+}
+
 interface Subject {
   id: string;
   label: string;
@@ -25,19 +34,21 @@ export default function Home() {
   const [threshold, setThreshold] = useState(0.3); // default
   const [shuffleEnabled, setShuffleEnabled] = useState(false);
 
-
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [fetchFromDb, setFetchFromDb] = useState(true); // default: true
 
-useEffect(() => {
-  const stored = localStorage.getItem('fetch_from_db');
-  if (stored) setFetchFromDb(stored === 'true');
-}, []);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
 
-const handleToggleDbFetch = (val: boolean) => {
-  setFetchFromDb(val);
-  localStorage.setItem('fetch_from_db', String(val));
-};
+  useEffect(() => {
+    const stored = localStorage.getItem('fetch_from_db');
+    if (stored) setFetchFromDb(stored === 'true');
+  }, []);
+
+  const handleToggleDbFetch = (val: boolean) => {
+    setFetchFromDb(val);
+    localStorage.setItem('fetch_from_db', String(val));
+  };
 
   useEffect(() => {
     const saved = localStorage.getItem('auto_speak');
@@ -45,11 +56,11 @@ const handleToggleDbFetch = (val: boolean) => {
       setAutoSpeak(saved === 'true');
     }
   }, []);
-  
+
   useEffect(() => {
     const storedThreshold = localStorage.getItem('fuzzy_threshold');
     const storedShuffle = localStorage.getItem('shuffle_enabled');
-  
+
     if (storedThreshold) setThreshold(parseFloat(storedThreshold));
     if (storedShuffle) setShuffleEnabled(storedShuffle === 'true');
   }, []);
@@ -64,7 +75,7 @@ const handleToggleDbFetch = (val: boolean) => {
           return;
         }
       }
-  
+
       const { data, error } = await supabase.from('subjects').select('*');
       if (!error && data) {
         setSubjects(data);
@@ -80,9 +91,9 @@ const handleToggleDbFetch = (val: boolean) => {
       if (!subjectSlug) return;
       const subject = subjects.find((s) => s.slug === subjectSlug);
       if (!subject) return;
-  
+
       const cacheKey = `topics_${subject.id}`;
-  
+
       if (fetchFromDb === false) {
         const cached = localStorage.getItem(cacheKey);
         if (cached && cached !== 'undefined')  {
@@ -90,160 +101,174 @@ const handleToggleDbFetch = (val: boolean) => {
           return;
         }
       }
-  
+
       const { data, error } = await supabase
         .from('topics')
         .select('*')
         .eq('subject_id', subject.id);
-  
+
       if (!error && data) {
         setTopics(data);
         localStorage.setItem(cacheKey, JSON.stringify(data));
       }
     };
-  
+
     fetchTopics();
   }, [subjectSlug, subjects, fetchFromDb]);
-  
 
   const handleSaveSettings = () => {
     localStorage.setItem('fuzzy_threshold', threshold.toString());
     localStorage.setItem('shuffle_enabled', shuffleEnabled.toString());
-    localStorage.setItem('auto_speak', String(autoSpeak)); // moved here
-    alert('✅ Settings saved!');
+    localStorage.setItem('auto_speak', String(autoSpeak));
+    setToastMsg('✅ Settings saved!');
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 2000);
   };
 
+  const handleClearStorage = () => {
+    if (confirm('⚠️ Are you sure you want to clear all cached data? This cannot be undone.')) {
+      localStorage.clear();
+      setToastMsg('🧹 LocalStorage cleared!');
+      setShowToast(true);
+      setTimeout(() => location.reload(), 1200);
+    }
+  };
 
   return (
-    <main className="p-4 max-w-md mx-auto">
-      <h1 className="text-xl font-bold mb-4">⚡ Quick Learn Quiz</h1>
+    <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 p-0 text-gray-100">
+      {/* Sticky Header */}
+      <header className="sticky top-0 z-20 bg-gray-950/90 backdrop-blur shadow-md py-4 px-4 flex flex-col items-center border-b border-gray-800">
+        <h1 className="text-2xl font-extrabold tracking-tight text-purple-400 flex items-center gap-2 drop-shadow">
+          <span role="img" aria-label="bolt">⚡</span> Quick Learn Quiz
+        </h1>
+        <Link href="/admin" className="mt-2">
+          <button className="px-4 py-2 bg-gray-800 text-purple-200 rounded-lg shadow hover:bg-purple-800 hover:text-white transition-all text-sm font-semibold border border-purple-700">
+            Admin Panel
+          </button>
+        </Link>
+      </header>
 
-      <Link href="/admin">
-        <button className="w-full mt-4 mb-6 bg-gray-800 text-white py-2 rounded hover:bg-gray-700">
-          Admin Panel
-        </button>
-      </Link>
+      <div className="max-w-md mx-auto mt-6 px-2">
+        {/* Settings Accordion */}
+        <details className="mb-6 rounded-lg border border-gray-800 bg-gray-900 shadow-sm" open>
+          <summary className="cursor-pointer px-4 py-3 font-semibold text-purple-300 select-none flex items-center gap-2">
+            <span role="img" aria-label="settings">⚙️</span> Settings
+          </summary>
+          <div className="px-4 pb-4 pt-2">
+            <label className="block text-sm mb-1 font-medium text-purple-200">Fuzzy Match Threshold (0 = strict, 1 = lenient)</label>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={threshold}
+              onChange={(e) => setThreshold(parseFloat(e.target.value))}
+              className="w-full mb-2 accent-purple-500"
+            />
+            <div className="text-xs text-purple-400 mb-4">Current: {threshold}</div>
 
-      {/* Settings */}
-      <div className="mb-6 border p-4 rounded bg-black-500">
-        <h2 className="text-md font-semibold mb-3">⚙️ Settings</h2>
+            <div className="flex items-center mb-3">
+              <input
+                id="shuffle"
+                type="checkbox"
+                checked={shuffleEnabled}
+                onChange={(e) => setShuffleEnabled(e.target.checked)}
+                className="accent-purple-500"
+              />
+              <label htmlFor="shuffle" className="ml-2 text-sm text-purple-200">Shuffle Questions</label>
+              <span className="ml-2 text-xs text-purple-400">{shuffleEnabled ? 'Enabled' : 'Disabled'}</span>
+            </div>
 
-        <label className="block text-sm mb-1">
-          Set Fuzzy Match Threshold (0 = strict, 1 = lenient)
-        </label>
-        <input
-          type="number"
-          min={0}
-          max={1}
-          step={0.01}
-          value={threshold}
-          onChange={(e) => setThreshold(parseFloat(e.target.value))}
-          className="w-full p-2 border rounded mb-4"
-        />
+            <div className="flex items-center mb-3">
+              <input
+                id="autoSpeak"
+                type="checkbox"
+                checked={autoSpeak}
+                onChange={(e) => setAutoSpeak(e.target.checked)}
+                className="accent-purple-500"
+              />
+              <label htmlFor="autoSpeak" className="ml-2 text-sm text-purple-200">Auto Speak Question on Load</label>
+            </div>
 
-        <div className="mb-3">
-          <label className="text-sm mr-2">Shuffle Questions:</label>
-          <input
-            type="checkbox"
-            checked={shuffleEnabled}
-            onChange={(e) => setShuffleEnabled(e.target.checked)}
-          />
-          <span className="ml-2 text-gray-600 text-sm">{shuffleEnabled ? 'Enabled' : 'Disabled'}</span>
-        </div>
+            <div className="flex items-center mb-4">
+              <input
+                id="fetchDb"
+                type="checkbox"
+                checked={fetchFromDb}
+                onChange={(e) => handleToggleDbFetch(e.target.checked)}
+                className="accent-purple-500"
+              />
+              <label htmlFor="fetchDb" className="ml-2 text-sm text-purple-200">Fetch latest from DB (Overwrite cache)</label>
+            </div>
 
-        <label className="flex items-center gap-2 mt-4">
-  <input
-    type="checkbox"
-    checked={autoSpeak}
-    onChange={(e) => setAutoSpeak(e.target.checked)}
-  />
-  Auto Speak Question on Load
-</label>
+            <button
+              onClick={handleSaveSettings}
+              className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-2 rounded-lg font-semibold shadow hover:from-purple-800 hover:to-indigo-800 hover:scale-105 transition-all"
+            >
+              💾 Save Settings
+            </button>
+          </div>
+        </details>
 
-<label className="flex items-center gap-2 mb-4">
-  <input
-    type="checkbox"
-    checked={fetchFromDb}
-    onChange={(e) => handleToggleDbFetch(e.target.checked)}
-  />
-  Fetch latest from DB (Overwrite cache)
-</label>
-
-        <button
-          onClick={handleSaveSettings}
-          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-500"
-        >
-          Save Settings
-        </button>
-      </div>
-
-      {/* Subject Dropdown */}
-      <label className="block mb-2">📘 Select Subject:</label>
-      <select
-        value={subjectSlug}
-        onChange={(e) => setSubjectSlug(e.target.value)}
-        className="w-full p-2 border rounded mb-4"
-      >
-        <option value="">-- Choose Subject --</option>
-        {subjects.map((subject) => (
-          <option key={subject.id} value={subject.slug}>
-            {subject.label}
-          </option>
-        ))}
-      </select>
-
-      {/* Topic Dropdown */}
-      {topics.length > 0 && (
-        <>
-          <label className="block mb-2">📚 Select Topic:</label>
+        {/* Subject Dropdown */}
+        <div className="mb-4">
+          <label className="block mb-2 font-medium text-purple-300">📘 Select Subject:</label>
           <select
-            value={topicName}
-            onChange={(e) => setTopicName(e.target.value)}
-            className="w-full p-2 border rounded mb-4"
+            value={subjectSlug}
+            onChange={(e) => setSubjectSlug(e.target.value)}
+            className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 bg-gray-950 text-purple-100 shadow-sm"
           >
-            <option value="">-- Choose Topic --</option>
-            {topics.map((topic) => (
-              <option key={topic.id} value={topic.name}>
-                {topic.name}
+            <option value="" className="text-gray-400">-- Choose Subject --</option>
+            {subjects.map((subject) => (
+              <option key={subject.id} value={subject.slug} className="text-gray-900 bg-purple-100">
+                {subject.label}
               </option>
             ))}
           </select>
-        </>
-      )}
+        </div>
 
-      {/* Start Quiz */}
+        {/* Topic Dropdown */}
+        {topics.length > 0 && (
+          <div className="mb-4">
+            <label className="block mb-2 font-medium text-purple-300">📚 Select Topic:</label>
+            <select
+              value={topicName}
+              onChange={(e) => setTopicName(e.target.value)}
+              className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 bg-gray-950 text-purple-100 shadow-sm"
+            >
+              <option value="" className="text-gray-400">-- Choose Topic --</option>
+              {topics.map((topic) => (
+                <option key={topic.id} value={topic.name} className="text-gray-900 bg-purple-100">
+                  {topic.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
-      
-      {subjectSlug && topicName && (
-  <div className="flex gap-4 mt-4">
-    <Link href={`/quiz/${subjectSlug}/${encodeURIComponent(topicName)}`}>
-      <button className="w-full bg-black text-white py-2 rounded hover:bg-gray-900">
-        ▶️ Start Quiz
-      </button>
-    </Link>
-    <Link href={`/learn/${subjectSlug}/${encodeURIComponent(topicName)}`}>
-      <button className="w-full bg-black text-white py-2 rounded hover:bg-gray-900">
-        📖 Learn
-      </button>
-    </Link>
-
-    <button
-  onClick={() => {
-    if (confirm('⚠️ Are you sure you want to clear all cached data? This cannot be undone.')) {
-      localStorage.clear();
-      alert('🧹 LocalStorage cleared!');
-      location.reload(); // reload the page to refresh UI
-    }
-  }}
-  className="w-full mt-2 bg-red-600 text-white py-2 rounded hover:bg-red-500"
->
-  🧹 Clear Local Storage
-</button>
-
-  </div>
-)}
-
-
+        {/* Start Quiz & Learn Buttons */}
+        {subjectSlug && topicName && (
+          <div className="flex flex-col gap-3 mt-4">
+            <Link href={`/quiz/${subjectSlug}/${encodeURIComponent(topicName)}`}>
+              <button className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all flex items-center justify-center gap-2">
+                ▶️ Start Quiz
+              </button>
+            </Link>
+            <Link href={`/learn/${subjectSlug}/${encodeURIComponent(topicName)}`}>
+              <button className="w-full bg-gradient-to-r from-green-500 to-teal-400 text-gray-900 py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-green-600 hover:to-teal-500 transition-all flex items-center justify-center gap-2">
+                📖 Learn
+              </button>
+            </Link>
+            <button
+              onClick={handleClearStorage}
+              className="w-full bg-gradient-to-r from-red-600 to-pink-500 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-red-700 hover:to-pink-600 transition-all flex items-center justify-center gap-2 mt-2"
+            >
+              🧹 Clear Local Storage
+            </button>
+          </div>
+        )}
+      </div>
+      <Toast message={toastMsg} show={showToast} />
     </main>
   );
 }

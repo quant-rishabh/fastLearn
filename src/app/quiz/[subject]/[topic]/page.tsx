@@ -176,152 +176,138 @@ async function playGoogleTTS(text: string, lang = 'en-GB') {
 
   if (finished) {
     return (
-      <main className="p-4 max-w-md mx-auto text-center">
-        <Link href="/" className="text-blue-600 underline text-sm mb-4 inline-block">
-  ← Back to Home
-</Link>
-        <h2 className="text-2xl font-bold mb-4">Quiz Finished 🎉</h2>
-        <p>You got {score} out of {questions.length} correct.</p>
+      <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 text-gray-100 p-4 max-w-md mx-auto text-center">
+        <Link href="/" className="text-purple-400 underline text-sm mb-4 inline-block hover:text-purple-200 transition-colors">
+          ← Back to Home
+        </Link>
+        <h2 className="text-2xl font-bold mb-4 text-purple-300 drop-shadow">Quiz Finished 🎉</h2>
+        <p className="mb-4">You got <span className="font-bold text-green-400">{score}</span> out of <span className="font-bold text-purple-200">{questions.length}</span> correct.</p>
 
         {wrongAnswers.length > 0 && (
-  <div className="mt-6 text-left">
-    <h3 className="text-lg font-semibold mb-2">❌ Questions You Got Wrong:</h3>
-    {wrongAnswers.map((item, idx) => (
-  <div key={idx} className="mb-4 p-3 bg-red-50 border text-black rounded">
-    <p><strong>Q:</strong> {item.question}</p>
-    <p><strong>Your Answer:</strong> {item.user}</p>
-    <p><strong>Correct Answer:</strong> {item.correct}</p>
-    {item.note && (
-      <p><strong>Note:</strong> {item.note}</p>
-    )}
-  </div>
-))}
-  </div>
-)}
+          <div className="mt-6 text-left">
+            <h3 className="text-lg font-semibold mb-2 text-red-300">❌ Questions You Got Wrong:</h3>
+            {wrongAnswers.map((item, idx) => (
+              <div key={idx} className="mb-4 p-3 bg-red-900/70 border border-red-700 text-red-100 rounded shadow">
+                <p><strong>Q:</strong> {item.question}</p>
+                <p><strong>Your Answer:</strong> <span className="text-yellow-200">{item.user}</span></p>
+                <p><strong>Correct Answer:</strong> <span className="text-green-300">{item.correct}</span></p>
+                {item.note && (
+                  <p><strong>Note:</strong> <span className="text-blue-200">{item.note}</span></p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </main>
     );
   }
 
   return (
-    <main className="p-4 max-w-md mx-auto">
-        <Link href="/" className="text-blue-600 underline text-sm mb-4 inline-block">
-  ← Back to Home
-</Link>
+    <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 text-gray-100 p-4 max-w-md mx-auto">
+      <Link href="/" className="text-purple-400 underline text-sm mb-4 inline-block hover:text-purple-200 transition-colors">
+        ← Back to Home
+      </Link>
 
-
-{questions[currentIndex].image_before && !hasSubmitted && (
-  <div className="mb-4">
-    <img
-      src={questions[currentIndex].image_before}
-      alt="Question Visual"
-      className="w-full h-auto max-h-[90vh] object-contain border rounded cursor-pointer"
-      onClick={() => window.open(questions[currentIndex].image_before, '_blank')}
-    />
-    <p className="text-xs text-center text-gray-500 mt-1">Click to open full image</p>
-  </div>
-)}
-
-<h2 className="text-lg font-semibold mb-2">Question {currentIndex + 1}</h2>
-<p className="text-sm text-gray-600 mb-4">
-  Question {currentIndex + 1} of {questions.length}
-</p>
-<div className="mb-2 flex items-center gap-2">
-  <p className="flex-1">{questions[currentIndex].question}</p>
-  <button
-    onClick={() => playGoogleTTS(questions[currentIndex].question)}
-    className="text-blue-600 hover:text-blue-800"
-    title="Listen to question"
-  >
-    🔊
-  </button>
-</div>
-
-{/* Show expected count of answers */}
-{(
-  <p className="text-sm text-gray-600 mb-4">
-    (Total answer expected comma seperated: {questions[currentIndex].answer.split('@').length})
-  </p>
-)}
-
-
-      {!hasSubmitted && (
-        <>
-         <input
-  ref={inputRef}
-  type="text"
-  value={userAnswer}
-  onChange={(e) => setUserAnswer(e.target.value)}
-  placeholder="Type all answers, separated by @"
-  className="w-full p-2 border rounded mb-4"
-/>
-
-          <button
-            onClick={handleSubmit}
-            className="w-full bg-blue-600 text-white py-2 rounded"
-          >
-            Submit
-          </button>
-        </>
+      {questions[currentIndex].image_before && !hasSubmitted && (
+        <div className="mb-4">
+          <img
+            src={questions[currentIndex].image_before}
+            alt="Question Visual"
+            className="w-full h-auto max-h-[40vh] object-contain border border-gray-700 rounded shadow cursor-pointer bg-gray-950"
+            onClick={() => window.open(questions[currentIndex].image_before, '_blank')}
+          />
+          <p className="text-xs text-center text-gray-400 mt-1">Click to open full image</p>
+        </div>
       )}
 
-{hasSubmitted && (
-  <>
-    <div
-      className={`mt-4 p-3 rounded text-sm `}
-    >
-      {isCorrect ? '✅ Correct!' : '❌ Incorrect.'}
-
-      <div className="mt-2 bg-green-100 border border-green-300 rounded p-2 flex items-center gap-2 text-black">
-        <strong>Correct Answer:</strong> {questions[currentIndex].answer}
-        <button
-          onClick={() => playGoogleTTS(questions[currentIndex].answer)}
-          className="ml-2 text-blue-600 hover:text-blue-800"
-          title="Listen to answer"
-        >
-          🔊
-        </button>
-      </div>
-
-      <div className="mt-1">
-        <strong>Your Answer:</strong> {userAnswer.trim()}
-      </div>
-
-      {questions[currentIndex].note && (
-        <div className="mt-2 bg-yellow-100 border border-yellow-300 rounded p-2 flex items-center gap-2 text-black">
-          <strong>Note:</strong> {questions[currentIndex].note}
+      <div className="bg-gray-950/80 border border-gray-800 rounded-xl shadow-lg p-4 mb-4">
+        <h2 className="text-lg font-bold mb-2 text-purple-200 drop-shadow">Question {currentIndex + 1}</h2>
+        <p className="text-xs text-gray-400 mb-2">Question {currentIndex + 1} of {questions.length}</p>
+        <div className="mb-2 flex items-center gap-2">
+          <p className="flex-1 text-gray-100 text-base">{questions[currentIndex].question}</p>
           <button
-            onClick={() => playGoogleTTS(questions[currentIndex].note!)}
-            className="ml-2 text-blue-600 hover:text-blue-800"
-            title="Listen to note"
+            onClick={() => playGoogleTTS(questions[currentIndex].question)}
+            className="text-purple-400 hover:text-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 rounded p-1"
+            title="Listen to question"
           >
             🔊
           </button>
         </div>
-      )}
-    </div>
+        <p className="text-xs text-gray-500 mb-4">
+          (Total answer expected comma separated: {questions[currentIndex].answer.split('@').length})
+        </p>
 
-    {questions[currentIndex].image_after && hasSubmitted && (
-  <div className="mt-4">
-    <img
-      src={questions[currentIndex].image_after}
-      alt="Answer Visual"
-      className="w-full h-auto max-h-[90vh] object-contain border rounded cursor-pointer"
-      onClick={() => window.open(questions[currentIndex].image_after, '_blank')}
-    />
-    <p className="text-xs text-center text-gray-500 mt-1">Click to open full image</p>
-  </div>
-)}
+        {!hasSubmitted && (
+          <>
+            <input
+              ref={inputRef}
+              type="text"
+              value={userAnswer}
+              onChange={(e) => setUserAnswer(e.target.value)}
+              placeholder="Type all answers, separated by @"
+              className="w-full p-3 border border-gray-700 rounded-lg bg-gray-900 text-gray-100 mb-4 focus:ring-2 focus:ring-purple-500 shadow"
+            />
+            <button
+              onClick={handleSubmit}
+              className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all"
+            >
+              Submit
+            </button>
+          </>
+        )}
 
-    <button
-      onClick={handleNext}
-      className="mt-4 w-full bg-gray-800 text-white py-2 rounded"
-    >
-      {currentIndex + 1 === questions.length ? 'Finish Quiz' : 'Next'}
-    </button>
-  </>
-)}
+        {hasSubmitted && (
+          <>
+            <div className={`mt-4 p-3 rounded text-sm ${isCorrect ? 'bg-green-900/70 border border-green-700 text-green-200' : 'bg-red-900/70 border border-red-700 text-red-200'} shadow`}>
+              {isCorrect ? '✅ Correct!' : '❌ Incorrect.'}
+              <div className="mt-2 bg-gray-900 border border-gray-700 rounded p-2 flex items-center gap-2 text-purple-100">
+                <strong>Correct Answer:</strong> <span className="text-green-300">{questions[currentIndex].answer}</span>
+                <button
+                  onClick={() => playGoogleTTS(questions[currentIndex].answer)}
+                  className="ml-2 text-purple-400 hover:text-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 rounded p-1"
+                  title="Listen to answer"
+                >
+                  🔊
+                </button>
+              </div>
+              <div className="mt-1">
+                <strong>Your Answer:</strong> <span className="text-yellow-200">{userAnswer.trim()}</span>
+              </div>
+              {questions[currentIndex].note && (
+                <div className="mt-2 bg-gray-800 border border-yellow-700 rounded p-2 flex items-center gap-2 text-yellow-200">
+                  <strong>Note:</strong> {questions[currentIndex].note}
+                  <button
+                    onClick={() => playGoogleTTS(questions[currentIndex].note!)}
+                    className="ml-2 text-purple-400 hover:text-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 rounded p-1"
+                    title="Listen to note"
+                  >
+                    🔊
+                  </button>
+                </div>
+              )}
+            </div>
 
+            {questions[currentIndex].image_after && hasSubmitted && (
+              <div className="mt-4">
+                <img
+                  src={questions[currentIndex].image_after}
+                  alt="Answer Visual"
+                  className="w-full h-auto max-h-[40vh] object-contain border border-gray-700 rounded shadow cursor-pointer bg-gray-950"
+                  onClick={() => window.open(questions[currentIndex].image_after, '_blank')}
+                />
+                <p className="text-xs text-center text-gray-400 mt-1">Click to open full image</p>
+              </div>
+            )}
 
+            <button
+              onClick={handleNext}
+              className="mt-4 w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all"
+            >
+              {currentIndex + 1 === questions.length ? 'Finish Quiz' : 'Next'}
+            </button>
+          </>
+        )}
+      </div>
     </main>
   );
 }
