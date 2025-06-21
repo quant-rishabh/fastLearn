@@ -219,11 +219,13 @@ export default function Home() {
             className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 bg-gray-950 text-purple-100 shadow-sm"
           >
             <option value="" className="text-gray-400">-- Choose Subject --</option>
-            {subjects.map((subject) => (
-              <option key={subject.id} value={subject.slug} className="text-gray-900 bg-purple-100">
-                {subject.label}
-              </option>
-            ))}
+            {[...subjects]
+              .sort((a, b) => a.label.localeCompare(b.label))
+              .map((subject) => (
+          <option key={subject.id} value={subject.slug} className="text-gray-900 bg-purple-100">
+            {subject.label}
+          </option>
+              ))}
           </select>
         </div>
 
