@@ -92,7 +92,7 @@ useEffect(() => {
     questions[currentIndex]?.question &&
     spokenIndexRef.current !== currentIndex
   ) {
-    speakQuestionAloud(questions[currentIndex].question);
+    speakTextAloud(questions[currentIndex].question);
     spokenIndexRef.current = currentIndex;
   }
 }, [currentIndex, questions]);
@@ -137,16 +137,17 @@ if (isMatch) {
 }
   };
 
-  function speakQuestionAloud(text: string) {
-    const utterance = new SpeechSynthesisUtterance(text);
+// Rename speakQuestionAloud to speakTextAloud for reuse
+function speakTextAloud(text: string) {
+  const utterance = new SpeechSynthesisUtterance(text);
   
-    // Check if text contains any Hindi (Devanagari) characters
-    const isHindi = /[\u0900-\u097F]/.test(text);
-    utterance.lang = isHindi ? 'hi-IN' : 'en-IN';
+  // Check if text contains any Hindi (Devanagari) characters
+  const isHindi = /[\u0900-\u097F]/.test(text);
+  utterance.lang = isHindi ? 'hi-IN' : 'en-GB';
   
-    utterance.rate = 1.05;
-    speechSynthesis.speak(utterance);
-  }
+  utterance.rate = 1.05;
+  speechSynthesis.speak(utterance);
+}
 
   
   const handleNext = () => {
@@ -221,7 +222,7 @@ if (isMatch) {
 <div className="mb-2 flex items-center gap-2">
   <p className="flex-1">{questions[currentIndex].question}</p>
   <button
-    onClick={() => speakQuestionAloud(questions[currentIndex].question)}
+    onClick={() => speakTextAloud(questions[currentIndex].question)}
     className="text-blue-600 hover:text-blue-800"
     title="Listen to question"
   >
@@ -264,8 +265,15 @@ if (isMatch) {
     >
       {isCorrect ? '✅ Correct!' : '❌ Incorrect.'}
 
-      <div className="mt-2">
+      <div className="mt-2 bg-green-100 border border-green-300 rounded p-2 flex items-center gap-2 text-black">
         <strong>Correct Answer:</strong> {questions[currentIndex].answer}
+        <button
+          onClick={() => speakTextAloud(questions[currentIndex].answer)}
+          className="ml-2 text-blue-600 hover:text-blue-800"
+          title="Listen to answer"
+        >
+          🔊
+        </button>
       </div>
 
       <div className="mt-1">
@@ -273,8 +281,15 @@ if (isMatch) {
       </div>
 
       {questions[currentIndex].note && (
-        <div className="mt-2">
+        <div className="mt-2 bg-yellow-100 border border-yellow-300 rounded p-2 flex items-center gap-2 text-black">
           <strong>Note:</strong> {questions[currentIndex].note}
+          <button
+            onClick={() => speakTextAloud(questions[currentIndex].note!)}
+            className="ml-2 text-blue-600 hover:text-blue-800"
+            title="Listen to note"
+          >
+            🔊
+          </button>
         </div>
       )}
     </div>
