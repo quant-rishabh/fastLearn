@@ -118,18 +118,20 @@ useEffect(() => {
     setUserAnswers(userAnswers.filter((_, i) => i !== idx));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = (overrideAnswers?: string[]) => {
     const correctAnswer = questions[currentIndex]?.answer;
     const expectedAnswers = correctAnswer
       .split('@')
       .map((a) => a.trim().toLowerCase())
       .filter(Boolean);
-    if (userAnswers.length === 0) {
+    const totalExpected = expectedAnswers.length;
+    const answersToCheck = overrideAnswers || userAnswers;
+    if (answersToCheck.length === 0) {
       alert("⚠️ Please enter at least one answer.");
       return;
     }
     const savedThreshold = Number(localStorage.getItem('fuzzy_threshold') || '0.4');
-    const isMatch = isFuzzyMatchArray(userAnswers, expectedAnswers, savedThreshold);
+    const isMatch = isFuzzyMatchArray(answersToCheck, expectedAnswers, savedThreshold);
     setIsCorrect(isMatch);
     setHasSubmitted(true);
     if (isMatch) {
@@ -140,7 +142,7 @@ useEffect(() => {
         {
           question: questions[currentIndex].question,
           correct: questions[currentIndex].answer,
-          user: userAnswers.join(', '),
+          user: answersToCheck.join(', '),
           note: questions[currentIndex].note || '',
         },
       ]);
@@ -184,6 +186,14 @@ useEffect(() => {
   if (!Array.isArray(questions) || questions.length === 0)  {
     return <p className="p-4">Loading quiz...</p>;
   }
+
+  // Calculate total expected answers for current question
+  const correctAnswer = questions[currentIndex]?.answer || '';
+  const expectedAnswers = correctAnswer
+    .split('@')
+    .map((a) => a.trim().toLowerCase())
+    .filter(Boolean);
+  const totalExpected = expectedAnswers.length;
 
   if (finished) {
     return (
@@ -271,24 +281,49 @@ useEffect(() => {
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleInputKeyDown}
-                placeholder="Type answer and press Enter"
+                onKeyDown={(e) => {
+                  if (totalExpected === 1 && e.key === 'Enter' && inputValue.trim()) {
+                    e.preventDefault();
+                    handleSubmit([inputValue.trim().toLowerCase()]);
+                  } else {
+                    handleInputKeyDown(e);
+                  }
+                }}
+                placeholder={`Type answer${totalExpected > 1 ? ' and press Enter/Add' : ''}`}
                 className="flex-1 p-3 border border-gray-700 rounded-lg bg-gray-900 text-gray-100 focus:ring-2 focus:ring-purple-500 shadow"
               />
-              <button
-                type="button"
-                onClick={handleAddAnswer}
-                className="bg-purple-700 hover:bg-purple-800 text-white px-4 py-2 rounded-lg font-bold shadow"
-              >
-                Add
-              </button>
+              {/* Show Add button only if multiple answers and not last answer */}
+              {totalExpected > 1 && userAnswers.length < totalExpected - 1 && (
+                <button
+                  type="button"
+                  onClick={handleAddAnswer}
+                  className="bg-purple-700 hover:bg-purple-800 text-white px-4 py-2 rounded-lg font-bold shadow"
+                >
+                  Add
+                </button>
+              )}
             </div>
-            <button
-              onClick={handleSubmit}
-              className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all"
-            >
-              Submit
-            </button>
+            {/* Show Submit button if single answer or last answer for multi-answer */}
+            {((totalExpected === 1) || (totalExpected > 1 && userAnswers.length === totalExpected - 1)) && (
+              <button
+                onClick={() => {
+                  if (totalExpected === 1) {
+                    // For single answer, submit directly with inputValue
+                    if (inputValue.trim()) {
+                      handleSubmit([inputValue.trim().toLowerCase()]);
+                    } else {
+                      handleSubmit([]);
+                    }
+                  } else {
+                    handleAddAnswer();
+                    setTimeout(() => handleSubmit(), 0);
+                  }
+                }}
+                className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all"
+              >
+                Submit
+              </button>
+            )}
           </>
         )}
 
