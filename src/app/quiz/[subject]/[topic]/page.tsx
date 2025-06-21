@@ -20,7 +20,8 @@ export default function QuizPage() {
   const { subject, topic } = useParams();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [userAnswer, setUserAnswer] = useState('');
+  const [userAnswers, setUserAnswers] = useState<string[]>([]); // New: array of answers
+  const [inputValue, setInputValue] = useState(''); // New: input for current answer
   const [score, setScore] = useState(0);
   const [finished, setFinished] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -98,68 +99,78 @@ useEffect(() => {
 }, [currentIndex, questions]);
 
 
+  const handleAddAnswer = () => {
+    const trimmed = inputValue.trim();
+    if (trimmed && !userAnswers.includes(trimmed.toLowerCase())) {
+      setUserAnswers([...userAnswers, trimmed.toLowerCase()]);
+      setInputValue('');
+    }
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && inputValue.trim()) {
+      e.preventDefault();
+      handleAddAnswer();
+    }
+  };
+
+  const handleRemoveAnswer = (idx: number) => {
+    setUserAnswers(userAnswers.filter((_, i) => i !== idx));
+  };
+
   const handleSubmit = () => {
     const correctAnswer = questions[currentIndex]?.answer;
-  
-    const userInputs = userAnswer
-    .split('@')
-    .map((a) => a.trim().toLowerCase())
-    .filter(Boolean);
-  
-  const expectedAnswers = correctAnswer
-    .split('@')
-    .map((a) => a.trim().toLowerCase())
-    .filter(Boolean);
-  
-    if (userInputs.length === 0) {
-      alert("⚠️ Please enter your answer.");
+    const expectedAnswers = correctAnswer
+      .split('@')
+      .map((a) => a.trim().toLowerCase())
+      .filter(Boolean);
+    if (userAnswers.length === 0) {
+      alert("⚠️ Please enter at least one answer.");
       return;
     }
     const savedThreshold = Number(localStorage.getItem('fuzzy_threshold') || '0.4');
-    const isMatch = isFuzzyMatchArray(userInputs, expectedAnswers, savedThreshold);
-
-setIsCorrect(isMatch);
-setHasSubmitted(true);
-
-if (isMatch) {
-  setScore((prev) => prev + 1);
-} else {
-    setWrongAnswers((prev) => [
+    const isMatch = isFuzzyMatchArray(userAnswers, expectedAnswers, savedThreshold);
+    setIsCorrect(isMatch);
+    setHasSubmitted(true);
+    if (isMatch) {
+      setScore((prev) => prev + 1);
+    } else {
+      setWrongAnswers((prev) => [
         ...prev,
         {
           question: questions[currentIndex].question,
           correct: questions[currentIndex].answer,
-          user: userAnswer.trim(),
+          user: userAnswers.join(', '),
           note: questions[currentIndex].note || '',
         },
       ]);
-      
-}
+    }
   };
 
-// Add this function to play audio from Google TTS
-async function playGoogleTTS(text: string, lang = 'en-GB') {
-  const res = await fetch('/api/tts-google', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, lang }),
-  });
-  if (!res.ok) {
-    alert('Failed to fetch audio');
-    return;
+  // Add this function to play audio from Google TTS
+  async function playGoogleTTS(text: string, lang = 'en-GB') {
+    const res = await fetch('/api/tts-google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, lang }),
+    });
+    if (!res.ok) {
+      alert('Failed to fetch audio');
+      return;
+    }
+    const data = await res.json();
+    if (data.audioContent) {
+      const audio = new Audio('data:audio/mp3;base64,' + data.audioContent);
+      audio.play();
+    }
   }
-  const data = await res.json();
-  if (data.audioContent) {
-    const audio = new Audio('data:audio/mp3;base64,' + data.audioContent);
-    audio.play();
-  }
-}
 
   
   const handleNext = () => {
     if (currentIndex + 1 < questions.length) {
       setCurrentIndex((prev) => prev + 1);
-      setUserAnswer('');
+      setUserAnswers([]); // Reset answers
+      setInputValue('');
       setHasSubmitted(false);
       setIsCorrect(null);
       setTimeout(() => {
@@ -239,14 +250,39 @@ async function playGoogleTTS(text: string, lang = 'en-GB') {
 
         {!hasSubmitted && (
           <>
-            <input
-              ref={inputRef}
-              type="text"
-              value={userAnswer}
-              onChange={(e) => setUserAnswer(e.target.value)}
-              placeholder="Type all answers, separated by @"
-              className="w-full p-3 border border-gray-700 rounded-lg bg-gray-900 text-gray-100 mb-4 focus:ring-2 focus:ring-purple-500 shadow"
-            />
+            <div className="flex flex-wrap gap-2 mb-2">
+              {userAnswers.map((ans, idx) => (
+                <span key={idx} className="bg-purple-800 text-white px-3 py-1 rounded-full flex items-center gap-1">
+                  {ans}
+                  <button
+                    type="button"
+                    className="ml-1 text-xs text-red-300 hover:text-red-500"
+                    onClick={() => handleRemoveAnswer(idx)}
+                    aria-label="Remove answer"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2 mb-4">
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleInputKeyDown}
+                placeholder="Type answer and press Enter"
+                className="flex-1 p-3 border border-gray-700 rounded-lg bg-gray-900 text-gray-100 focus:ring-2 focus:ring-purple-500 shadow"
+              />
+              <button
+                type="button"
+                onClick={handleAddAnswer}
+                className="bg-purple-700 hover:bg-purple-800 text-white px-4 py-2 rounded-lg font-bold shadow"
+              >
+                Add
+              </button>
+            </div>
             <button
               onClick={handleSubmit}
               className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all"
@@ -271,7 +307,7 @@ async function playGoogleTTS(text: string, lang = 'en-GB') {
                 </button>
               </div>
               <div className="mt-1">
-                <strong>Your Answer:</strong> <span className="text-yellow-200">{userAnswer.trim()}</span>
+                <strong>Your Answer:</strong> <span className="text-yellow-200">{userAnswers.join(', ')}</span>
               </div>
               {questions[currentIndex].note && (
                 <div className="mt-2 bg-gray-800 border border-yellow-700 rounded p-2 flex items-center gap-2 text-yellow-200">

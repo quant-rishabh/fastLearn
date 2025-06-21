@@ -299,6 +299,38 @@ const showMessage = (msg: string, duration = 3000) => {
   };
   
 
+// Utility for handling both paste and file input for images
+const handleImageInput = async (
+  e: React.ClipboardEvent<HTMLDivElement> | React.ChangeEvent<HTMLInputElement>,
+  type: 'before' | 'after',
+  isPaste = false
+) => {
+  let file: File | null = null;
+  if (isPaste && 'clipboardData' in e) {
+    const items = e.clipboardData?.items;
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          file = item.getAsFile();
+          break;
+        }
+      }
+    }
+  } else if ('target' in e && (e.target as HTMLInputElement).files?.[0]) {
+    file = (e.target as HTMLInputElement).files![0];
+  }
+  if (file) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    const mockEvent = {
+      target: { files: dt.files }
+    } as React.ChangeEvent<HTMLInputElement>;
+    await handleImageUpload(mockEvent, type);
+    showMessage('📋 Image added!');
+  }
+};
+
   return (
     <main className="p-4 max-w-md mx-auto">
         {message && (
@@ -484,14 +516,64 @@ const showMessage = (msg: string, duration = 3000) => {
           onChange={(e) => setNote(e.target.value)}
         />
 
-        {/* Image Uploads */}
+        {/* Image Uploads with Clipboard Paste */}
         <label className="block mb-1">Image Before (optional)</label>
-        <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'before')} className="mb-2" />
-        {imageBefore && <img src={imageBefore} alt="before" className="mb-2 rounded w-full max-h-40 object-contain border" />}
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => handleImageInput(e, 'before', false)}
+          className="mb-2"
+        />
+        <div
+          onPaste={async (e) => await handleImageInput(e, 'before', true)}
+          className="mb-2 border-2 border-dashed border-gray-400 rounded p-2 text-center cursor-pointer bg-gray-50 hover:bg-gray-100"
+          tabIndex={0}
+          title="Paste an image here (Ctrl+V or Cmd+V) or long-press to paste on mobile"
+        >
+          <span className="text-gray-500 text-sm">Paste image here (Ctrl+V or Cmd+V) or long-press to paste on mobile</span>
+        </div>
+        {imageBefore && (
+          <div className="mb-2 flex items-center gap-2">
+            <img src={imageBefore} alt="before" className="rounded w-full max-h-40 object-contain border" />
+            <button
+              type="button"
+              onClick={() => setImageBefore(null)}
+              className="ml-2 px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs"
+              title="Remove image"
+            >
+              Remove
+            </button>
+          </div>
+        )}
 
         <label className="block mb-1">Image After (optional)</label>
-        <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'after')} className="mb-2" />
-        {imageAfter && <img src={imageAfter} alt="after" className="mb-4 rounded w-full max-h-40 object-contain border" />}
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => handleImageInput(e, 'after', false)}
+          className="mb-2"
+        />
+        <div
+          onPaste={async (e) => await handleImageInput(e, 'after', true)}
+          className="mb-2 border-2 border-dashed border-gray-400 rounded p-2 text-center cursor-pointer bg-gray-50 hover:bg-gray-100"
+          tabIndex={0}
+          title="Paste an image here (Ctrl+V or Cmd+V) or long-press to paste on mobile"
+        >
+          <span className="text-gray-500 text-sm">Paste image here (Ctrl+V or Cmd+V) or long-press to paste on mobile</span>
+        </div>
+        {imageAfter && (
+          <div className="mb-4 flex items-center gap-2">
+            <img src={imageAfter} alt="after" className="rounded w-full max-h-40 object-contain border" />
+            <button
+              type="button"
+              onClick={() => setImageAfter(null)}
+              className="ml-2 px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs"
+              title="Remove image"
+            >
+              Remove
+            </button>
+          </div>
+        )}
 
         <button
   onClick={handleSubmitQuestion}
