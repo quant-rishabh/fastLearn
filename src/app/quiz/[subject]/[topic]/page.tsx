@@ -92,7 +92,7 @@ useEffect(() => {
     questions[currentIndex]?.question &&
     spokenIndexRef.current !== currentIndex
   ) {
-    speakTextAloud(questions[currentIndex].question);
+    playGoogleTTS(questions[currentIndex].question);
     spokenIndexRef.current = currentIndex;
   }
 }, [currentIndex, questions]);
@@ -137,16 +137,22 @@ if (isMatch) {
 }
   };
 
-// Rename speakQuestionAloud to speakTextAloud for reuse
-function speakTextAloud(text: string) {
-  const utterance = new SpeechSynthesisUtterance(text);
-  
-  // Check if text contains any Hindi (Devanagari) characters
-  const isHindi = /[\u0900-\u097F]/.test(text);
-  utterance.lang = isHindi ? 'hi-IN' : 'en-GB';
-  
-  utterance.rate = 1.05;
-  speechSynthesis.speak(utterance);
+// Add this function to play audio from Google TTS
+async function playGoogleTTS(text: string, lang = 'en-GB') {
+  const res = await fetch('/api/tts-google', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, lang }),
+  });
+  if (!res.ok) {
+    alert('Failed to fetch audio');
+    return;
+  }
+  const data = await res.json();
+  if (data.audioContent) {
+    const audio = new Audio('data:audio/mp3;base64,' + data.audioContent);
+    audio.play();
+  }
 }
 
   
@@ -222,7 +228,7 @@ function speakTextAloud(text: string) {
 <div className="mb-2 flex items-center gap-2">
   <p className="flex-1">{questions[currentIndex].question}</p>
   <button
-    onClick={() => speakTextAloud(questions[currentIndex].question)}
+    onClick={() => playGoogleTTS(questions[currentIndex].question)}
     className="text-blue-600 hover:text-blue-800"
     title="Listen to question"
   >
@@ -268,7 +274,7 @@ function speakTextAloud(text: string) {
       <div className="mt-2 bg-green-100 border border-green-300 rounded p-2 flex items-center gap-2 text-black">
         <strong>Correct Answer:</strong> {questions[currentIndex].answer}
         <button
-          onClick={() => speakTextAloud(questions[currentIndex].answer)}
+          onClick={() => playGoogleTTS(questions[currentIndex].answer)}
           className="ml-2 text-blue-600 hover:text-blue-800"
           title="Listen to answer"
         >
@@ -284,7 +290,7 @@ function speakTextAloud(text: string) {
         <div className="mt-2 bg-yellow-100 border border-yellow-300 rounded p-2 flex items-center gap-2 text-black">
           <strong>Note:</strong> {questions[currentIndex].note}
           <button
-            onClick={() => speakTextAloud(questions[currentIndex].note!)}
+            onClick={() => playGoogleTTS(questions[currentIndex].note!)}
             className="ml-2 text-blue-600 hover:text-blue-800"
             title="Listen to note"
           >
