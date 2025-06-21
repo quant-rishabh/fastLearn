@@ -284,6 +284,7 @@ useEffect(() => {
                 onKeyDown={(e) => {
                   if (totalExpected === 1 && e.key === 'Enter' && inputValue.trim()) {
                     e.preventDefault();
+                    setUserAnswers([inputValue.trim().toLowerCase()]);
                     handleSubmit([inputValue.trim().toLowerCase()]);
                   } else {
                     handleInputKeyDown(e);
@@ -310,8 +311,10 @@ useEffect(() => {
                   if (totalExpected === 1) {
                     // For single answer, submit directly with inputValue
                     if (inputValue.trim()) {
+                      setUserAnswers([inputValue.trim().toLowerCase()]);
                       handleSubmit([inputValue.trim().toLowerCase()]);
                     } else {
+                      setUserAnswers([]);
                       handleSubmit([]);
                     }
                   } else {
