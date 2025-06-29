@@ -40,6 +40,9 @@ export default function Home() {
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
 
+  const [timerSeconds, setTimerSeconds] = useState(20); // default timer value
+  const [practiceCount, setPracticeCount] = useState(2); // default spaced repetition count
+
   useEffect(() => {
     const stored = localStorage.getItem('fetch_from_db');
     if (stored) setFetchFromDb(stored === 'true');
@@ -63,6 +66,16 @@ export default function Home() {
 
     if (storedThreshold) setThreshold(parseFloat(storedThreshold));
     if (storedShuffle) setShuffleEnabled(storedShuffle === 'true');
+  }, []);
+
+  useEffect(() => {
+    const storedTimer = localStorage.getItem('quiz_timer_seconds');
+    if (storedTimer) setTimerSeconds(Number(storedTimer));
+  }, []);
+
+  useEffect(() => {
+    const storedPractice = localStorage.getItem('practice_count');
+    if (storedPractice) setPracticeCount(Number(storedPractice));
   }, []);
 
   // Load subjects
@@ -120,6 +133,8 @@ export default function Home() {
     localStorage.setItem('fuzzy_threshold', threshold.toString());
     localStorage.setItem('shuffle_enabled', shuffleEnabled.toString());
     localStorage.setItem('auto_speak', String(autoSpeak));
+    localStorage.setItem('quiz_timer_seconds', timerSeconds.toString());
+    localStorage.setItem('practice_count', practiceCount.toString()); // save spaced repetition
     setToastMsg('✅ Settings saved!');
     setShowToast(true);
     setTimeout(() => setShowToast(false), 2000);
@@ -141,11 +156,18 @@ export default function Home() {
         <h1 className="text-2xl font-extrabold tracking-tight text-purple-400 flex items-center gap-2 drop-shadow">
           <span role="img" aria-label="bolt">⚡</span> Quick Learn Quiz
         </h1>
-        <Link href="/admin" className="mt-2">
-          <button className="px-4 py-2 bg-gray-800 text-purple-200 rounded-lg shadow hover:bg-purple-800 hover:text-white transition-all text-sm font-semibold border border-purple-700">
-            Admin Panel
-          </button>
-        </Link>
+        <div className="flex gap-2 mt-2">
+          <Link href="/admin">
+            <button className="px-4 py-2 bg-gray-800 text-purple-200 rounded-lg shadow hover:bg-purple-800 hover:text-white transition-all text-sm font-semibold border border-purple-700">
+              Admin Panel
+            </button>
+          </Link>
+          <Link href="/progress">
+            <button className="px-4 py-2 bg-green-800 text-green-200 rounded-lg shadow hover:bg-green-900 hover:text-white transition-all text-sm font-semibold border border-green-700">
+              Progress
+            </button>
+          </Link>
+        </div>
       </header>
 
       <div className="max-w-md mx-auto mt-6 px-2">
@@ -199,6 +221,41 @@ export default function Home() {
                 className="accent-purple-500"
               />
               <label htmlFor="fetchDb" className="ml-2 text-sm text-purple-200">Fetch latest from DB (Overwrite cache)</label>
+            </div>
+
+            {/* Timer Setting */}
+            <div className="mb-4">
+              <label className="block text-sm mb-1 font-medium text-purple-200" htmlFor="timerSeconds">
+                Per-Question Timer (seconds)
+              </label>
+              <input
+                id="timerSeconds"
+                type="number"
+                min={5}
+                max={120}
+                step={1}
+                value={timerSeconds}
+                onChange={(e) => setTimerSeconds(Number(e.target.value))}
+                className="w-full p-2 border border-gray-700 rounded-lg bg-gray-900 text-purple-100 shadow mb-1"
+              />
+              <div className="text-xs text-purple-400">Current: {timerSeconds} seconds</div>
+            </div>
+            {/* Spaced Repetition Setting */}
+            <div className="mb-4">
+              <label className="block text-sm mb-1 font-medium text-purple-200" htmlFor="practiceCount">
+                Practice Each Missed Question (Spaced Repetition)
+              </label>
+              <input
+                id="practiceCount"
+                type="number"
+                min={1}
+                max={5}
+                step={1}
+                value={practiceCount}
+                onChange={(e) => setPracticeCount(Number(e.target.value))}
+                className="w-full p-2 border border-gray-700 rounded-lg bg-gray-900 text-purple-100 shadow mb-1"
+              />
+              <div className="text-xs text-purple-400">Current: {practiceCount} times</div>
             </div>
 
             <button

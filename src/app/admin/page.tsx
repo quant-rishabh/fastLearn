@@ -193,7 +193,7 @@ const showMessage = (msg: string, duration = 3000) => {
       setNote('');
       setImageBefore(null);
       setImageAfter(null);
-      setTopicName('');
+      // setTopicName(''); // Do NOT reset topic, keep it selected
     } else {
       showMessage(`❌ Error: ${result.error}`);
     }
@@ -344,6 +344,21 @@ const handleImageInput = async (
                     className="bg-red-700 hover:bg-red-800 text-white px-3 py-1 rounded text-xs font-bold shadow transition-all"
                     onClick={async () => {
                       if (!window.confirm(`Are you sure you want to delete subject '${s.label}'? This will remove all related topics and questions!`)) return;
+                      // 1. Get all topics for this subject
+                      const { data: topics, error: topicsError } = await supabase.from('topics').select('id').eq('subject_id', s.id);
+                      if (topicsError) {
+                        showMessage('❌ Failed to fetch topics');
+                        return;
+                      }
+                      // 2. Delete all questions for each topic
+                      if (topics && topics.length > 0) {
+                        for (const topic of topics) {
+                          await supabase.from('questions').delete().eq('topic_id', topic.id);
+                        }
+                        // 3. Delete all topics for this subject
+                        await supabase.from('topics').delete().eq('subject_id', s.id);
+                      }
+                      // 4. Delete the subject itself
                       const { error } = await supabase.from('subjects').delete().eq('id', s.id);
                       if (!error) {
                         showMessage('🗑️ Subject deleted');

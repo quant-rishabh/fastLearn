@@ -30,14 +30,24 @@ export default function QuizPage() {
   { question: string; correct: string; user: string; note?: string }[]
 >([]);
   
-
+  // Track indices of questions not yet answered correctly
+  const [remainingQuestions, setRemainingQuestions] = useState<number[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // On questions load, initialize remainingQuestions with all indices, shuffled (no repetition at start)
+  useEffect(() => {
+    if (questions.length > 0) {
+      const indices = Array.from({ length: questions.length }, (_, i) => i);
+      const shuffled = shuffleArray(indices);
+      setRemainingQuestions(shuffled);
+      setCurrentIndex(shuffled[0]); // Set to first in shuffled, not 0
+      setSessionQuestionNumber(1); // Reset session question number
+      setFinished(false);
+    }
+  }, [questions.length]);
 
-
-
-
+  // Helper to shuffle an array
   function shuffleArray<T>(array: T[]): T[] {
     return array
       .map(value => ({ value, sort: Math.random() }))
@@ -118,7 +128,31 @@ useEffect(() => {
     setUserAnswers(userAnswers.filter((_, i) => i !== idx));
   };
 
+  // Modified handleNext for adaptive flow
+  const handleNext = () => {
+    setTimerActive(false); // Stop timer on next
+    setUserAnswers([]);
+    setInputValue('');
+    setHasSubmitted(false);
+    setIsCorrect(null);
+    setSessionQuestionNumber((prev) => prev + 1); // Increment session question number
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+
+    // If no more questions, finish
+    if (remainingQuestions.length === 0) {
+      setFinished(true);
+      return;
+    }
+
+    // Just pick the next question in the current order (no shuffle here)
+    setCurrentIndex(remainingQuestions[0]);
+  };
+
+  // Modified handleSubmit for adaptive flow
   const handleSubmit = (overrideAnswers?: string[]) => {
+    setTimerActive(false); // Stop timer on submit
     const correctAnswer = questions[currentIndex]?.answer;
     const expectedAnswers = correctAnswer
       .split('@')
@@ -136,6 +170,14 @@ useEffect(() => {
     setHasSubmitted(true);
     if (isMatch) {
       setScore((prev) => prev + 1);
+      // Remove only one instance of this question from remainingQuestions
+      setRemainingQuestions((prev) => {
+        const idx = prev.indexOf(currentIndex);
+        if (idx === -1) return prev;
+        const next = [...prev];
+        next.splice(idx, 1);
+        return next;
+      });
     } else {
       setWrongAnswers((prev) => [
         ...prev,
@@ -146,6 +188,13 @@ useEffect(() => {
           note: questions[currentIndex].note || '',
         },
       ]);
+      // Add this question index back to remainingQuestions practice_count times
+      const practiceCount = Number(localStorage.getItem('practice_count') || '2');
+      setRemainingQuestions((prev) => {
+        const toAdd = Array(practiceCount).fill(currentIndex);
+        const next = [...prev, ...toAdd];
+        return shuffleArray(next);
+      });
     }
   };
 
@@ -167,21 +216,81 @@ useEffect(() => {
     }
   }
 
-  
-  const handleNext = () => {
-    if (currentIndex + 1 < questions.length) {
-      setCurrentIndex((prev) => prev + 1);
-      setUserAnswers([]); // Reset answers
-      setInputValue('');
-      setHasSubmitted(false);
-      setIsCorrect(null);
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
-    } else {
-      setFinished(true);
+  const [timerSeconds, setTimerSeconds] = useState(20); // default timer value
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [timerActive, setTimerActive] = useState(false);
+  const [sessionQuestionNumber, setSessionQuestionNumber] = useState<number>(1); // Sequential question number for session
+  const [canAdvance, setCanAdvance] = useState(false); // NEW: controls Enter for next
+
+  // Load timer setting from localStorage
+  useEffect(() => {
+    const storedTimer = localStorage.getItem('quiz_timer_seconds');
+    setTimerSeconds(storedTimer ? Number(storedTimer) : 20);
+  }, []);
+
+  // Start timer when question changes
+  useEffect(() => {
+    if (questions.length > 0 && !finished && !hasSubmitted) {
+      setTimeLeft(timerSeconds);
+      setTimerActive(true);
     }
-  };
+  }, [currentIndex, questions.length, finished, hasSubmitted, timerSeconds]);
+
+  // Timer countdown effect
+  useEffect(() => {
+    if (!timerActive || timeLeft === null) return;
+    if (hasSubmitted) return; // Prevent timer from firing after submit
+    if (timeLeft <= 0) {
+      setTimerActive(false);
+      setHasSubmitted(true);
+      setIsCorrect(false);
+      setWrongAnswers((prev) => [
+        ...prev,
+        {
+          question: questions[currentIndex].question,
+          correct: questions[currentIndex].answer,
+          user: userAnswers.join(', ') || '[No answer]',
+          note: questions[currentIndex].note || '',
+        },
+      ]);
+      return;
+    }
+    const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [timerActive, timeLeft, hasSubmitted]);
+
+  // When a new question is loaded or user starts answering, disable advancing
+  useEffect(() => {
+    setCanAdvance(false);
+  }, [currentIndex, hasSubmitted]);
+
+  // When feedback is shown, enable advancing
+  useEffect(() => {
+    if (hasSubmitted) {
+      setCanAdvance(true);
+    }
+  }, [hasSubmitted]);
+
+  // Keyboard shortcut: Press Enter to go to next question after feedback, only if input is not focused and canAdvance is true
+  useEffect(() => {
+    if (!canAdvance) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+      if (
+        e.key === 'Enter' &&
+        active &&
+        active.tagName !== 'INPUT' &&
+        active.tagName !== 'TEXTAREA'
+      ) {
+        setCanAdvance(false); // Prevent double advance
+        setTimerActive(false);
+        handleNext();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canAdvance]);
+
 
   if (!Array.isArray(questions) || questions.length === 0)  {
     return <p className="p-4">Loading quiz...</p>;
@@ -194,8 +303,28 @@ useEffect(() => {
     .map((a) => a.trim().toLowerCase())
     .filter(Boolean);
   const totalExpected = expectedAnswers.length;
-
+  
   if (finished) {
+    // Update mastery count in localStorage and prepare for backend sync
+    useEffect(() => {
+      if (!finished) return;
+      const subj = String(subject);
+      const top = String(topic);
+      const key = 'progress_mastery';
+      let progress: any = {};
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw) progress = JSON.parse(raw);
+      } catch {}
+      if (!progress[subj]) progress[subj] = {};
+      if (!progress[subj][top]) progress[subj][top] = { mastered: 0 };
+      progress[subj][top].mastered = (progress[subj][top].mastered || 0) + 1;
+      progress[subj][top].lastMastered = new Date().toISOString();
+      localStorage.setItem(key, JSON.stringify(progress));
+      // Optionally: call backend sync here
+      syncProgressToBackend(progress);
+    }, [finished, subject, topic]);
+
     return (
       <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 text-gray-100 p-4 max-w-md mx-auto text-center">
         <Link href="/" className="text-purple-400 underline text-sm mb-4 inline-block hover:text-purple-200 transition-colors">
@@ -229,6 +358,30 @@ useEffect(() => {
         ← Back to Home
       </Link>
 
+      {/* Questions Remaining */}
+      <div className="mb-4 text-center">
+        <span className="text-2xl font-extrabold text-pink-400 drop-shadow-sm">Questions Remaining: {remainingQuestions.length}</span>
+      </div>
+
+      {/* BIG TIMER - intense, prominent, animated */}
+      <div className="flex justify-center mb-4">
+        <div
+          className={`relative flex items-center justify-center w-24 h-24 rounded-full shadow-lg border-4 transition-colors duration-300
+        ${timeLeft !== null && timeLeft <= 5 ? 'border-red-600 bg-red-900 animate-pulse' : 'border-purple-700 bg-gray-900'}
+          `}
+        >
+          <span
+        className={`text-3xl font-extrabold font-mono select-none drop-shadow-lg
+          ${timeLeft !== null && timeLeft <= 5 ? 'text-red-400 animate-pulse' : 'text-purple-200'}
+        `}
+        style={{ letterSpacing: '0.05em' }}
+          >
+        {timeLeft !== null ? timeLeft : timerSeconds}
+          </span>
+          <span className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs text-gray-400 tracking-wider">SECONDS</span>
+        </div>
+      </div>
+
       {questions[currentIndex].image_before && !hasSubmitted && (
         <div className="mb-4">
           <img
@@ -242,8 +395,11 @@ useEffect(() => {
       )}
 
       <div className="bg-gray-950/80 border border-gray-800 rounded-xl shadow-lg p-4 mb-4">
-        <h2 className="text-lg font-bold mb-2 text-purple-200 drop-shadow">Question {currentIndex + 1}</h2>
-        <p className="text-xs text-gray-400 mb-2">Question {currentIndex + 1} of {questions.length}</p>
+        <h2 className="text-lg font-bold mb-2 text-purple-200 drop-shadow">Question {sessionQuestionNumber}</h2>
+        <div className="flex justify-between items-center mb-2">
+          <p className="text-xs text-gray-400">Question {sessionQuestionNumber} of {questions.length}</p>
+          <span className={`text-sm font-mono px-2 py-1 rounded ${timeLeft !== null && timeLeft <= 5 ? 'bg-red-700 text-white' : 'bg-gray-800 text-purple-200'}`}>⏰ {timeLeft !== null ? timeLeft : timerSeconds}s</span>
+        </div>
         <div className="mb-2 flex items-center gap-2">
           <p className="flex-1 text-gray-100 text-base">{questions[currentIndex].question}</p>
           <button
@@ -308,6 +464,7 @@ useEffect(() => {
             {((totalExpected === 1) || (totalExpected > 1 && userAnswers.length === totalExpected - 1)) && (
               <button
                 onClick={() => {
+                  setTimerActive(false); // Stop timer on submit
                   if (totalExpected === 1) {
                     // For single answer, submit directly with inputValue
                     if (inputValue.trim()) {
@@ -374,14 +531,23 @@ useEffect(() => {
             )}
 
             <button
-              onClick={handleNext}
+              onClick={() => {
+                setTimerActive(false); // Stop timer on next
+                handleNext();
+              }}
               className="mt-4 w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all"
             >
-              {currentIndex + 1 === questions.length ? 'Finish Quiz' : 'Next'}
+              {remainingQuestions.length === 0 ? 'Finish Quiz' : 'Next'}
             </button>
           </>
         )}
       </div>
     </main>
   );
+}
+
+// Backend sync stub
+async function syncProgressToBackend(progress: any) {
+  // TODO: Implement backend API call
+  // await fetch('/api/sync-progress', { method: 'POST', body: JSON.stringify(progress) });
 }
