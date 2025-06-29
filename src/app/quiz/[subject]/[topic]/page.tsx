@@ -339,221 +339,225 @@ useEffect(() => {
 
   if (finished) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 text-gray-100 p-4 max-w-md mx-auto text-center">
-        <Link href="/" className="text-purple-400 underline text-sm mb-4 inline-block hover:text-purple-200 transition-colors">
-          ← Back to Home
-        </Link>
-        <h2 className="text-2xl font-bold mb-4 text-purple-300 drop-shadow">Quiz Finished 🎉</h2>
-        <p className="mb-4">You got <span className="font-bold text-green-400">{score}</span> out of <span className="font-bold text-purple-200">{questions.length}</span> correct.</p>
+      <main className="min-h-screen flex flex-col items-center justify-start bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 text-gray-100 p-2 sm:p-4 max-w-md mx-auto text-center overflow-hidden pt-4">
+        <div className="w-full max-w-md flex flex-col items-center">
+          <Link href="/" className="text-purple-400 underline text-sm mb-4 inline-block hover:text-purple-200 transition-colors">
+            ← Back to Home
+          </Link>
+          <h2 className="text-2xl font-bold mb-4 text-purple-300 drop-shadow">Quiz Finished 🎉</h2>
+          <p className="mb-4">You got <span className="font-bold text-green-400">{score}</span> out of <span className="font-bold text-purple-200">{questions.length}</span> correct.</p>
 
-        {wrongAnswers.length > 0 && (
-          <div className="mt-6 text-left">
-            <h3 className="text-lg font-semibold mb-2 text-red-300">❌ Questions You Got Wrong:</h3>
-            {wrongAnswers.map((item, idx) => (
-              <div key={idx} className="mb-4 p-3 bg-red-900/70 border border-red-700 text-red-100 rounded shadow">
-                <p><strong>Q:</strong> {item.question}</p>
-                <p><strong>Your Answer:</strong> <span className="text-yellow-200">{item.user}</span></p>
-                <p><strong>Correct Answer:</strong> <span className="text-green-300">{item.correct}</span></p>
-                {item.note && (
-                  <p><strong>Note:</strong> <span className="text-blue-200">{item.note}</span></p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+          {wrongAnswers.length > 0 && (
+            <div className="mt-6 text-left max-h-[40vh] overflow-y-auto w-full pr-2">
+              <h3 className="text-lg font-semibold mb-2 text-red-300">❌ Questions You Got Wrong:</h3>
+              {wrongAnswers.map((item, idx) => (
+                <div key={idx} className="mb-4 p-3 bg-red-900/70 border border-red-700 text-red-100 rounded shadow">
+                  <p><strong>Q:</strong> {item.question}</p>
+                  <p><strong>Your Answer:</strong> <span className="text-yellow-200">{item.user}</span></p>
+                  <p><strong>Correct Answer:</strong> <span className="text-green-300">{item.correct}</span></p>
+                  {item.note && (
+                    <p><strong>Note:</strong> <span className="text-blue-200">{item.note}</span></p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 text-gray-100 p-4 max-w-md mx-auto">
-      <Link href="/" className="text-purple-400 underline text-sm mb-4 inline-block hover:text-purple-200 transition-colors">
-        ← Back to Home
-      </Link>
+    <main className="min-h-screen flex flex-col items-center justify-start bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 text-gray-100 p-2 sm:p-4 max-w-md mx-auto overflow-hidden pt-4">
+      <div className="w-full max-w-md flex flex-col items-center">
+        <Link href="/" className="text-purple-400 underline text-sm mb-4 inline-block hover:text-purple-200 transition-colors">
+          ← Back to Home
+        </Link>
 
-      {/* Questions Remaining */}
-      <div className="mb-4 text-center">
-        <span className="text-2xl font-extrabold text-pink-400 drop-shadow-sm">Questions Remaining: {remainingQuestions.length}</span>
-      </div>
+        {/* Questions Remaining */}
+        <div className="mb-4 text-center">
+          <span className="text-2xl font-extrabold text-pink-400 drop-shadow-sm">Questions Remaining: {remainingQuestions.length}</span>
+        </div>
 
-      {/* BIG TIMER - intense, prominent, animated */}
-      <div className="flex justify-center mb-4">
-        <div
-          className={`relative flex items-center justify-center w-24 h-24 rounded-full shadow-lg border-4 transition-colors duration-300
-        ${timeLeft !== null && timeLeft <= 5 ? 'border-red-600 bg-red-900 animate-pulse' : 'border-purple-700 bg-gray-900'}
+        {/* BIG TIMER - intense, prominent, animated */}
+        <div className="flex justify-center mb-4">
+          <div
+            className={`relative flex items-center justify-center w-24 h-24 rounded-full shadow-lg border-4 transition-colors duration-300
+          ${timeLeft !== null && timeLeft <= 5 ? 'border-red-600 bg-red-900 animate-pulse' : 'border-purple-700 bg-gray-900'}
+            `}
+          >
+            <span
+          className={`text-3xl font-extrabold font-mono select-none drop-shadow-lg
+            ${timeLeft !== null && timeLeft <= 5 ? 'text-red-400 animate-pulse' : 'text-purple-200'}
           `}
-        >
-          <span
-        className={`text-3xl font-extrabold font-mono select-none drop-shadow-lg
-          ${timeLeft !== null && timeLeft <= 5 ? 'text-red-400 animate-pulse' : 'text-purple-200'}
-        `}
-        style={{ letterSpacing: '0.05em' }}
-          >
-        {timeLeft !== null ? timeLeft : timerSeconds}
-          </span>
-          <span className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs text-gray-400 tracking-wider">SECONDS</span>
+          style={{ letterSpacing: '0.05em' }}
+            >
+          {timeLeft !== null ? timeLeft : timerSeconds}
+            </span>
+            <span className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs text-gray-400 tracking-wider">SECONDS</span>
+          </div>
         </div>
-      </div>
 
-      {questions[currentIndex].image_before && !hasSubmitted && (
-        <div className="mb-4">
-          <img
-            src={questions[currentIndex].image_before}
-            alt="Question Visual"
-            className="w-full h-auto max-h-[40vh] object-contain border border-gray-700 rounded shadow cursor-pointer bg-gray-950"
-            onClick={() => window.open(questions[currentIndex].image_before, '_blank')}
-          />
-          <p className="text-xs text-center text-gray-400 mt-1">Click to open full image</p>
-        </div>
-      )}
+        <div className="bg-gray-950/80 border border-gray-800 rounded-xl shadow-lg p-4 mb-4 w-full flex flex-col">
+          <h2 className="text-lg font-bold mb-2 text-purple-200 drop-shadow">Question {sessionQuestionNumber}</h2>
+          <div className="flex justify-between items-center mb-2">
+            <p className="text-xs text-gray-400">Question {sessionQuestionNumber} of {questions.length}</p>
+            <span className={`text-sm font-mono px-2 py-1 rounded ${timeLeft !== null && timeLeft <= 5 ? 'bg-red-700 text-white' : 'bg-gray-800 text-purple-200'}`}>⏰ {timeLeft !== null ? timeLeft : timerSeconds}s</span>
+          </div>
+          <div className="mb-2 flex items-center gap-2">
+            <p className="flex-1 text-gray-100 text-base">{questions[currentIndex].question}</p>
+            <button
+              onClick={() => playGoogleTTS(questions[currentIndex].question)}
+              className="text-purple-400 hover:text-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 rounded p-1"
+              title="Listen to question"
+            >
+              🔊
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 mb-4">
+            (Total answer expected comma separated: {questions[currentIndex].answer.split('@').length})
+          </p>
 
-      <div className="bg-gray-950/80 border border-gray-800 rounded-xl shadow-lg p-4 mb-4">
-        <h2 className="text-lg font-bold mb-2 text-purple-200 drop-shadow">Question {sessionQuestionNumber}</h2>
-        <div className="flex justify-between items-center mb-2">
-          <p className="text-xs text-gray-400">Question {sessionQuestionNumber} of {questions.length}</p>
-          <span className={`text-sm font-mono px-2 py-1 rounded ${timeLeft !== null && timeLeft <= 5 ? 'bg-red-700 text-white' : 'bg-gray-800 text-purple-200'}`}>⏰ {timeLeft !== null ? timeLeft : timerSeconds}s</span>
-        </div>
-        <div className="mb-2 flex items-center gap-2">
-          <p className="flex-1 text-gray-100 text-base">{questions[currentIndex].question}</p>
-          <button
-            onClick={() => playGoogleTTS(questions[currentIndex].question)}
-            className="text-purple-400 hover:text-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 rounded p-1"
-            title="Listen to question"
-          >
-            🔊
-          </button>
-        </div>
-        <p className="text-xs text-gray-500 mb-4">
-          (Total answer expected comma separated: {questions[currentIndex].answer.split('@').length})
-        </p>
-
-        {!hasSubmitted && (
-          <>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {userAnswers.map((ans, idx) => (
-                <span key={idx} className="bg-purple-800 text-white px-3 py-1 rounded-full flex items-center gap-1">
-                  {ans}
-                  <button
-                    type="button"
-                    className="ml-1 text-xs text-red-300 hover:text-red-500"
-                    onClick={() => handleRemoveAnswer(idx)}
-                    aria-label="Remove answer"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="flex gap-2 mb-4">
-              <input
-                ref={inputRef}
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (totalExpected === 1 && e.key === 'Enter' && inputValue.trim()) {
-                    e.preventDefault();
-                    setUserAnswers([inputValue.trim().toLowerCase()]);
-                    handleSubmit([inputValue.trim().toLowerCase()]);
-                  } else {
-                    handleInputKeyDown(e);
-                  }
-                }}
-                placeholder={`Type answer${totalExpected > 1 ? ' and press Enter/Add' : ''}`}
-                className="flex-1 p-3 border border-gray-700 rounded-lg bg-gray-900 text-gray-100 focus:ring-2 focus:ring-purple-500 shadow"
-              />
-              {/* Show Add button only if multiple answers and not last answer */}
-              {totalExpected > 1 && userAnswers.length < totalExpected - 1 && (
-                <button
-                  type="button"
-                  onClick={handleAddAnswer}
-                  className="bg-purple-700 hover:bg-purple-800 text-white px-4 py-2 rounded-lg font-bold shadow"
-                >
-                  Add
-                </button>
-              )}
-            </div>
-            {/* Show Submit button if single answer or last answer for multi-answer */}
-            {((totalExpected === 1) || (totalExpected > 1 && userAnswers.length === totalExpected - 1)) && (
-              <button
-                onClick={() => {
-                  setTimerActive(false); // Stop timer on submit
-                  if (totalExpected === 1) {
-                    // For single answer, submit directly with inputValue
-                    if (inputValue.trim()) {
+          {!hasSubmitted && (
+            <>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {userAnswers.map((ans, idx) => (
+                  <span key={idx} className="bg-purple-800 text-white px-3 py-1 rounded-full flex items-center gap-1">
+                    {ans}
+                    <button
+                      type="button"
+                      className="ml-1 text-xs text-red-300 hover:text-red-500"
+                      onClick={() => handleRemoveAnswer(idx)}
+                      aria-label="Remove answer"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2 mb-4">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (totalExpected === 1 && e.key === 'Enter' && inputValue.trim()) {
+                      e.preventDefault();
                       setUserAnswers([inputValue.trim().toLowerCase()]);
                       handleSubmit([inputValue.trim().toLowerCase()]);
                     } else {
-                      setUserAnswers([]);
-                      handleSubmit([]);
+                      handleInputKeyDown(e);
                     }
-                  } else {
-                    handleAddAnswer();
-                    setTimeout(() => handleSubmit(), 0);
-                  }
-                }}
-                className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all"
-              >
-                Submit
-              </button>
-            )}
-          </>
-        )}
-
-        {hasSubmitted && (
-          <>
-            <div className={`mt-4 p-3 rounded text-sm ${isCorrect ? 'bg-green-900/70 border border-green-700 text-green-200' : 'bg-red-900/70 border border-red-700 text-red-200'} shadow`}>
-              {isCorrect ? '✅ Correct!' : '❌ Incorrect.'}
-              <div className="mt-2 bg-gray-900 border border-gray-700 rounded p-2 flex items-center gap-2 text-purple-100">
-                <strong>Correct Answer:</strong> <span className="text-green-300">{questions[currentIndex].answer}</span>
-                <button
-                  onClick={() => playGoogleTTS(questions[currentIndex].answer)}
-                  className="ml-2 text-purple-400 hover:text-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 rounded p-1"
-                  title="Listen to answer"
-                >
-                  🔊
-                </button>
-              </div>
-              <div className="mt-1">
-                <strong>Your Answer:</strong> <span className="text-yellow-200">{userAnswers.join(', ')}</span>
-              </div>
-              {questions[currentIndex].note && (
-                <div className="mt-2 bg-gray-800 border border-yellow-700 rounded p-2 flex items-center gap-2 text-yellow-200">
-                  <strong>Note:</strong> {questions[currentIndex].note}
+                  }}
+                  placeholder={`Type answer${totalExpected > 1 ? ' and press Enter/Add' : ''}`}
+                  className="flex-1 p-3 border border-gray-700 rounded-lg bg-gray-900 text-gray-100 focus:ring-2 focus:ring-purple-500 shadow"
+                />
+                {/* Show Add button only if multiple answers and not last answer */}
+                {totalExpected > 1 && userAnswers.length < totalExpected - 1 && (
                   <button
-                    onClick={() => playGoogleTTS(questions[currentIndex].note!)}
+                    type="button"
+                    onClick={handleAddAnswer}
+                    className="bg-purple-700 hover:bg-purple-800 text-white px-4 py-2 rounded-lg font-bold shadow"
+                  >
+                    Add
+                  </button>
+                )}
+              </div>
+              {/* Show Submit button if single answer or last answer for multi-answer */}
+              {((totalExpected === 1) || (totalExpected > 1 && userAnswers.length === totalExpected - 1)) && (
+                <>
+                  <button
+                    onClick={() => {
+                      setTimerActive(false); // Stop timer on submit
+                      if (totalExpected === 1) {
+                        // For single answer, submit directly with inputValue
+                        if (inputValue.trim()) {
+                          setUserAnswers([inputValue.trim().toLowerCase()]);
+                          handleSubmit([inputValue.trim().toLowerCase()]);
+                        } else {
+                          setUserAnswers([]);
+                          handleSubmit([]);
+                        }
+                      } else {
+                        handleAddAnswer();
+                        setTimeout(() => handleSubmit(), 0);
+                      }
+                    }}
+                    className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all mb-4"
+                  >
+                    Submit
+                  </button>
+                  {/* Move image_before here, below the Submit button */}
+                  {questions[currentIndex].image_before && (
+                    <div className="mt-4 w-full">
+                      <img
+                        src={questions[currentIndex].image_before}
+                        alt="Question Visual"
+                        className="w-full h-48 object-contain rounded-lg cursor-pointer bg-gray-900 border border-gray-700"
+                        onClick={() => window.open(questions[currentIndex].image_before, '_blank')}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+
+          {hasSubmitted && (
+            <>
+              <div className={`mt-4 p-3 rounded text-sm ${isCorrect ? 'bg-green-900/70 border border-green-700 text-green-200' : 'bg-red-900/70 border border-red-700 text-red-200'} shadow`}>
+                {isCorrect ? '✅ Correct!' : '❌ Incorrect.'}
+                <div className="mt-2 bg-gray-900 border border-gray-700 rounded p-2 flex items-center gap-2 text-purple-100">
+                  <strong>Correct Answer:</strong> <span className="text-green-300">{questions[currentIndex].answer}</span>
+                  <button
+                    onClick={() => playGoogleTTS(questions[currentIndex].answer)}
                     className="ml-2 text-purple-400 hover:text-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 rounded p-1"
-                    title="Listen to note"
+                    title="Listen to answer"
                   >
                     🔊
                   </button>
                 </div>
-              )}
-            </div>
-
-            {questions[currentIndex].image_after && hasSubmitted && (
-              <div className="mt-4">
-                <img
-                  src={questions[currentIndex].image_after}
-                  alt="Answer Visual"
-                  className="w-full h-auto max-h-[40vh] object-contain border border-gray-700 rounded shadow cursor-pointer bg-gray-950"
-                  onClick={() => window.open(questions[currentIndex].image_after, '_blank')}
-                />
-                <p className="text-xs text-center text-gray-400 mt-1">Click to open full image</p>
+                <div className="mt-1">
+                  <strong>Your Answer:</strong> <span className="text-yellow-200">{userAnswers.join(', ')}</span>
+                </div>
+                {questions[currentIndex].note && (
+                  <div className="mt-2 bg-gray-800 border border-yellow-700 rounded p-2 flex items-center gap-2 text-yellow-200">
+                    <strong>Note:</strong> {questions[currentIndex].note}
+                    <button
+                      onClick={() => playGoogleTTS(questions[currentIndex].note!)}
+                      className="ml-2 text-purple-400 hover:text-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 rounded p-1"
+                      title="Listen to note"
+                    >
+                      🔊
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
 
-            <button
-              onClick={() => {
-                setTimerActive(false); // Stop timer on next
-                handleNext();
-              }}
-              className="mt-4 w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all"
-            >
-              {remainingQuestions.length === 0 ? 'Finish Quiz' : 'Next'}
-            </button>
-          </>
-        )}
+              {questions[currentIndex].image_after && hasSubmitted && (
+                <div className="mt-4 w-full">
+                  <img
+                    src={questions[currentIndex].image_after}
+                    alt="Answer Visual"
+                    className="w-full h-48 object-contain rounded-lg cursor-pointer bg-gray-900 border border-gray-700"
+                    onClick={() => window.open(questions[currentIndex].image_after, '_blank')}
+                  />
+                </div>
+              )}
+
+              <button
+                onClick={() => {
+                  setTimerActive(false); // Stop timer on next
+                  handleNext();
+                }}
+                className="mt-4 w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all"
+              >
+                {remainingQuestions.length === 0 ? 'Finish Quiz' : 'Next'}
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </main>
   );
