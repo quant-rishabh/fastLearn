@@ -8,87 +8,45 @@ interface MasteryData {
   subject: string;
   topic: string;
   count: number;
-}
-
-interface SubjectMeta {
-  id: string;
-  label: string;
-  slug: string;
-}
-interface TopicMeta {
-  id: string;
-  name: string;
-  subject_id: string;
+  subjectSlug: string;
 }
 
 export default function ProgressPage() {
   const [data, setData] = useState<MasteryData[]>([]);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get all subjects and topics from localStorage
-    let subjects: SubjectMeta[] = [];
-    let topics: TopicMeta[] = [];
-    try {
-      const subjRaw = localStorage.getItem("subjects");
-      if (subjRaw) subjects = JSON.parse(subjRaw);
-    } catch {}
-    // For each subject, get topics
-    topics = [];
-    for (const subj of subjects) {
-      const cacheKey = `topics_${subj.id}`;
+    const fetchProgressData = async () => {
       try {
-        const topicRaw = localStorage.getItem(cacheKey);
-        if (topicRaw) {
-          const parsed = JSON.parse(topicRaw);
-          if (Array.isArray(parsed)) topics.push(...parsed);
+        setLoading(true);
+        
+        // Fetch fresh data from database API
+        const response = await fetch('/api/get-all-progress');
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+          const masteryData: MasteryData[] = result.data.map((item: any) => ({
+            subject: item.subject_label,
+            subjectSlug: item.subject_slug,
+            topic: item.topic_name,
+            count: item.mastery_count || 0
+          }));
+          
+          setData(masteryData);
+        } else {
+          console.error('Failed to fetch progress data:', result);
+          setData([]);
         }
-      } catch {}
-    }
-    // Build all subject/topic pairs
-    const mastery: MasteryData[] = [];
-    for (const subj of subjects) {
-      const subjTopics = topics.filter((t) => t.subject_id === subj.id);
-      for (const topic of subjTopics) {
-        const masteryKey = `mastery_${subj.slug}_${topic.name}`;
-        const count = Number(localStorage.getItem(masteryKey) || '0');
-        mastery.push({ subject: subj.label, topic: topic.name, count });
+      } catch (error) {
+        console.error('Error fetching progress data:', error);
+        setData([]);
+      } finally {
+        setLoading(false);
       }
-    }
-    setData(mastery);
-  }, []);
+    };
 
-  // We need to get the subject slug for the quiz link. We'll add it to MasteryData.
-  // So, let's rebuild the data with subjectSlug as well.
-  useEffect(() => {
-    let subjects: SubjectMeta[] = [];
-    let topics: TopicMeta[] = [];
-    try {
-      const subjRaw = localStorage.getItem("subjects");
-      if (subjRaw) subjects = JSON.parse(subjRaw);
-    } catch {}
-    topics = [];
-    for (const subj of subjects) {
-      const cacheKey = `topics_${subj.id}`;
-      try {
-        const topicRaw = localStorage.getItem(cacheKey);
-        if (topicRaw) {
-          const parsed = JSON.parse(topicRaw);
-          if (Array.isArray(parsed)) topics.push(...parsed);
-        }
-      } catch {}
-    }
-    // Build all subject/topic pairs, now with subjectSlug
-    const mastery: (MasteryData & { subjectSlug: string })[] = [];
-    for (const subj of subjects) {
-      const subjTopics = topics.filter((t) => t.subject_id === subj.id);
-      for (const topic of subjTopics) {
-        const masteryKey = `mastery_${subj.slug}_${topic.name}`;
-        const count = Number(localStorage.getItem(masteryKey) || '0');
-        mastery.push({ subject: subj.label, subjectSlug: subj.slug, topic: topic.name, count });
-      }
-    }
-    setData(mastery);
+    fetchProgressData();
   }, []);
 
   const sorted = [...data].sort((a, b) =>
@@ -96,10 +54,18 @@ export default function ProgressPage() {
   );
 
   // Group topics by subject for table rendering
-  const grouped: { [subject: string]: (MasteryData & { subjectSlug: string })[] } = {};
-  for (const row of sorted as (MasteryData & { subjectSlug: string })[]) {
+  const grouped: { [subject: string]: MasteryData[] } = {};
+  for (const row of sorted) {
     if (!grouped[row.subject]) grouped[row.subject] = [];
     grouped[row.subject].push(row);
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 text-gray-100 p-4 max-w-md mx-auto text-center">
+        <p className="text-purple-200 text-lg mt-20">Loading progress data...</p>
+      </main>
+    );
   }
 
   return (

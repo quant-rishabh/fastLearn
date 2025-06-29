@@ -291,6 +291,39 @@ useEffect(() => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [canAdvance]);
 
+  // Update mastery count when quiz finishes - MUST BE BEFORE ANY EARLY RETURNS
+  useEffect(() => {
+    if (!finished) return;
+
+    const updateMastery = async () => {
+      const subj = String(subject);
+      const top = String(topic);
+
+      try {
+        const response = await fetch('/api/update-mastery', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subject: subj,
+            topic: decodeURIComponent(top),
+            increment: 1,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          console.error('Failed to update mastery:', result);
+        } else {
+          console.log('✅ Mastery updated successfully:', result);
+        }
+      } catch (error) {
+        console.error('Failed to update mastery in database:', error);
+      }
+    };
+
+    updateMastery();
+  }, [finished, subject, topic]);
 
   if (!Array.isArray(questions) || questions.length === 0)  {
     return <p className="p-4">Loading quiz...</p>;
@@ -303,28 +336,8 @@ useEffect(() => {
     .map((a) => a.trim().toLowerCase())
     .filter(Boolean);
   const totalExpected = expectedAnswers.length;
-  
-  if (finished) {
-    // Update mastery count in localStorage and prepare for backend sync
-    useEffect(() => {
-      if (!finished) return;
-      const subj = String(subject);
-      const top = String(topic);
-      const key = 'progress_mastery';
-      let progress: any = {};
-      try {
-        const raw = localStorage.getItem(key);
-        if (raw) progress = JSON.parse(raw);
-      } catch {}
-      if (!progress[subj]) progress[subj] = {};
-      if (!progress[subj][top]) progress[subj][top] = { mastered: 0 };
-      progress[subj][top].mastered = (progress[subj][top].mastered || 0) + 1;
-      progress[subj][top].lastMastered = new Date().toISOString();
-      localStorage.setItem(key, JSON.stringify(progress));
-      // Optionally: call backend sync here
-      syncProgressToBackend(progress);
-    }, [finished, subject, topic]);
 
+  if (finished) {
     return (
       <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 text-gray-100 p-4 max-w-md mx-auto text-center">
         <Link href="/" className="text-purple-400 underline text-sm mb-4 inline-block hover:text-purple-200 transition-colors">
@@ -544,10 +557,4 @@ useEffect(() => {
       </div>
     </main>
   );
-}
-
-// Backend sync stub
-async function syncProgressToBackend(progress: any) {
-  // TODO: Implement backend API call
-  // await fetch('/api/sync-progress', { method: 'POST', body: JSON.stringify(progress) });
 }
