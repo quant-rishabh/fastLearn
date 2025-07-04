@@ -19,7 +19,7 @@ interface Question {
 export default function QuizPage() {
   const { subject, topic } = useParams();
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(-1); // Initialize to -1 to prevent premature TTS
   const [userAnswers, setUserAnswers] = useState<string[]>([]); // New: array of answers
   const [inputValue, setInputValue] = useState(''); // New: input for current answer
   const [score, setScore] = useState(0);
@@ -100,6 +100,7 @@ useEffect(() => {
   if (
     speakSetting === 'true' &&
     questions?.length > 0 &&
+    currentIndex >= 0 && // Only speak if we have a valid index
     questions[currentIndex]?.question &&
     spokenIndexRef.current !== currentIndex
   ) {
@@ -343,7 +344,7 @@ useEffect(() => {
     updateMastery();
   }, [finished, subject, topic]);
 
-  if (!Array.isArray(questions) || questions.length === 0)  {
+  if (!Array.isArray(questions) || questions.length === 0 || currentIndex < 0)  {
     return <p className="p-4">Loading quiz...</p>;
   }
 
