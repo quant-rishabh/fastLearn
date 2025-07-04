@@ -477,9 +477,16 @@ useEffect(() => {
               🔊
             </button>
           </div>
-          <p className="text-xs text-gray-500 mb-4">
-            (Total answer expected comma separated: {questions[currentIndex].answer.split('@').length})
-          </p>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-purple-300 font-semibold">
+              Expected: {questions[currentIndex].answer.split('@').length}
+            </p>
+            {questions[currentIndex].answer.split('@').length > 1 && (
+              <span className="bg-orange-700 text-orange-200 px-2 py-1 rounded-full text-xs font-bold border border-orange-500">
+                MULTI-ANSWER
+              </span>
+            )}
+          </div>
 
           {!hasSubmitted && (
             <>

@@ -212,6 +212,16 @@ const showMessage = (msg: string, duration = 3000) => {
     if (!error) {
       setTopicName('');
       showMessage('Topic added ✅');
+      
+      // Refresh topics list for the currently selected subject
+      const { data: updatedTopics } = await supabase
+        .from('topics')
+        .select('*')
+        .eq('subject_id', subject.id);
+      
+      if (updatedTopics) {
+        setTopics(updatedTopics);
+      }
     }
   };
 
