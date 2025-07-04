@@ -419,7 +419,10 @@ useEffect(() => {
                   <p><strong>Your Answer:</strong> <span className="text-yellow-200">{item.user}</span></p>
                   <p><strong>Correct Answer:</strong> <span className="text-green-300">{item.correct}</span></p>
                   {item.note && (
-                    <p><strong>Note:</strong> <span className="text-blue-200">{item.note}</span></p>
+                    <div>
+                      <div><strong>Note:</strong></div>
+                      <div className="text-blue-200 whitespace-pre-line mt-1">{item.note}</div>
+                    </div>
                   )}
                 </div>
               ))}
@@ -602,15 +605,20 @@ useEffect(() => {
                   <strong>Your Answer:</strong> <span className="text-yellow-200">{userAnswers.join(', ')}</span>
                 </div>
                 {questions[currentIndex].note && (
-                  <div className="mt-2 bg-gray-800 border border-yellow-700 rounded p-2 flex items-center gap-2 text-yellow-200">
-                    <strong>Note:</strong> {questions[currentIndex].note}
-                    <button
-                      onClick={() => playGoogleTTS(questions[currentIndex].note!)}
-                      className="ml-2 text-purple-400 hover:text-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 rounded p-1"
-                      title="Listen to note"
-                    >
-                      🔊
-                    </button>
+                  <div className="mt-2 bg-gray-800 border border-yellow-700 rounded p-2 text-yellow-200">
+                    <div className="flex items-start gap-2">
+                      <strong>Note:</strong>
+                      <button
+                        onClick={() => playGoogleTTS(questions[currentIndex].note!)}
+                        className="text-purple-400 hover:text-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 rounded p-1"
+                        title="Listen to note"
+                      >
+                        🔊
+                      </button>
+                    </div>
+                    <div className="mt-1 whitespace-pre-line">
+                      {questions[currentIndex].note}
+                    </div>
                   </div>
                 )}
               </div>
