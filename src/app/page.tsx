@@ -26,6 +26,9 @@ interface Topic {
 }
 
 export default function Home() {
+  // Tab state
+  const [activeTab, setActiveTab] = useState('dashboard');
+
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [subjectSlug, setSubjectSlug] = useState('');
   const [topics, setTopics] = useState<Topic[]>([]);

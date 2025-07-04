@@ -112,8 +112,16 @@ useEffect(() => {
   const handleAddAnswer = () => {
     const trimmed = inputValue.trim();
     if (trimmed && !userAnswers.includes(trimmed.toLowerCase())) {
-      setUserAnswers([...userAnswers, trimmed.toLowerCase()]);
+      const newAnswers = [...userAnswers, trimmed.toLowerCase()];
+      setUserAnswers(newAnswers);
       setInputValue('');
+      
+      // Auto-submit if this is the last answer needed
+      if (newAnswers.length === totalExpected) {
+        setTimeout(() => {
+          handleSubmit(newAnswers);
+        }, 0);
+      }
     }
   };
 
@@ -121,6 +129,16 @@ useEffect(() => {
     if (e.key === 'Enter' && inputValue.trim()) {
       e.preventDefault();
       handleAddAnswer();
+      
+      // Check if this will be the last answer needed
+      if (userAnswers.length + 1 === totalExpected) {
+        // Auto-submit after adding the final answer
+        setTimeout(() => {
+          const finalAnswers = [...userAnswers, inputValue.trim().toLowerCase()];
+          setUserAnswers(finalAnswers);
+          handleSubmit(finalAnswers);
+        }, 0);
+      }
     }
   };
 
