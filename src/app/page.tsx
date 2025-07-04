@@ -47,18 +47,36 @@ export default function Home() {
   // Load subjects
   useEffect(() => {
     const loadSubjects = async () => {
+      const fetchFromDb = localStorage.getItem('fetch_from_db') === 'true';
+
+      // Cache Mode: Use cache if available, only fetch if cache is empty
       if (!fetchFromDb) {
         const cached = localStorage.getItem('subjects');
         if (cached && cached !== 'undefined') {
-          setSubjects(JSON.parse(cached));
-          return;
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setSubjects(parsed);
+              return; // Exit early, don't fetch from DB
+            }
+          } catch (e) {
+            console.error('❌ Failed to parse cached subjects:', e);
+          }
         }
       }
 
-      const { data, error } = await supabase.from('subjects').select('*');
-      if (!error && data) {
-        setSubjects(data);
-        localStorage.setItem('subjects', JSON.stringify(data));
+      // Fresh Mode: Always fetch from DB, or Cache Mode fallback
+      try {
+        const { data, error } = await supabase.from('subjects').select('*');
+        if (!error && data) {
+          setSubjects(data);
+          // Always update cache when we fetch from DB
+          localStorage.setItem('subjects', JSON.stringify(data));
+        } else {
+          console.error('Failed to fetch subjects:', error);
+        }
+      } catch (error) {
+        console.error('❌ Database error:', error);
       }
     };
     loadSubjects();
@@ -72,23 +90,40 @@ export default function Home() {
       if (!subject) return;
 
       const cacheKey = `topics_${subject.id}`;
+      const fetchFromDb = localStorage.getItem('fetch_from_db') === 'true';
 
-      if (fetchFromDb === false) {
+      // Cache Mode: Use cache if available, only fetch if cache is empty
+      if (!fetchFromDb) {
         const cached = localStorage.getItem(cacheKey);
-        if (cached && cached !== 'undefined')  {
-          setTopics(JSON.parse(cached));
-          return;
+        if (cached && cached !== 'undefined') {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setTopics(parsed);
+              return; // Exit early, don't fetch from DB
+            }
+          } catch (e) {
+            console.error('❌ Failed to parse cached topics:', e);
+          }
         }
       }
 
-      const { data, error } = await supabase
-        .from('topics')
-        .select('*')
-        .eq('subject_id', subject.id);
+      // Fresh Mode: Always fetch from DB, or Cache Mode fallback
+      try {
+        const { data, error } = await supabase
+          .from('topics')
+          .select('*')
+          .eq('subject_id', subject.id);
 
-      if (!error && data) {
-        setTopics(data);
-        localStorage.setItem(cacheKey, JSON.stringify(data));
+        if (!error && data) {
+          setTopics(data);
+          // Always update cache when we fetch from DB
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        } else {
+          console.error('Failed to fetch topics:', error);
+        }
+      } catch (error) {
+        console.error('❌ Database error:', error);
       }
     };
 

@@ -61,32 +61,71 @@ export default function QuizPage() {
       const cacheKey = `quiz_${subject}_${decodeURIComponent(topic as string)}`;
       const fetchFromDb = localStorage.getItem('fetch_from_db') === 'true';
   
+      // Cache Mode (fetchFromDb = false): Use cache if available, only fetch if cache is empty
       if (!fetchFromDb) {
         const cached = localStorage.getItem(cacheKey);
         if (cached && cached !== 'undefined') {
           try {
             const parsed = JSON.parse(cached);
-            if (Array.isArray(parsed)) {
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              console.log('📦 Using cached quiz data');
               setQuestions(parsed);
-              return;
+              return; // Exit early, don't fetch from DB
             } else {
-              console.warn('⚠️ Cached quiz is not an array, ignoring.');
+              console.warn('⚠️ Cached quiz is empty or invalid, fetching from DB');
             }
           } catch (e) {
-            console.error('❌ Failed to parse cached quiz:', e);
+            console.error('❌ Failed to parse cached quiz, fetching from DB:', e);
           }
+        } else {
+          console.log('📭 No cache found, fetching from DB');
         }
+      } else {
+        console.log('🔄 Fresh mode enabled, fetching from DB');
       }
   
-      // fallback to DB/API
-      const res = await fetch(`/api/get-quiz?subject=${subject}&topic=${decodeURIComponent(topic as string)}`);
-      const { questions } = await res.json();
+      // Fresh Mode (fetchFromDb = true): Always fetch from DB, always update cache
+      // OR Cache Mode fallback: Fetch from DB if cache was empty/invalid
+      try {
+        const res = await fetch(`/api/get-quiz?subject=${subject}&topic=${decodeURIComponent(topic as string)}`);
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        const { questions } = await res.json();
   
-      const shuffleEnabled = localStorage.getItem('shuffle_enabled') === 'true';
-      const finalQuestions = shuffleEnabled ? questions.sort(() => Math.random() - 0.5) : questions;
+        if (!questions || !Array.isArray(questions)) {
+          throw new Error('Invalid questions data received from API');
+        }
   
-      setQuestions(finalQuestions);
-      localStorage.setItem(cacheKey, JSON.stringify(finalQuestions || []));
+        const shuffleEnabled = localStorage.getItem('shuffle_enabled') === 'true';
+        const finalQuestions = shuffleEnabled ? questions.sort(() => Math.random() - 0.5) : questions;
+  
+        setQuestions(finalQuestions);
+        
+        // Always update cache when we fetch from DB
+        localStorage.setItem(cacheKey, JSON.stringify(finalQuestions));
+        console.log('💾 Quiz data cached');
+      } catch (error) {
+        console.error('❌ Failed to fetch quiz from DB:', error);
+        
+        // Fallback: try to use any cached data if DB fetch fails
+        const cached = localStorage.getItem(cacheKey);
+        if (cached && cached !== 'undefined') {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              console.log('🆘 Using cached data as fallback due to DB error');
+              setQuestions(parsed);
+              return;
+            }
+          } catch (e) {
+            console.error('❌ Cached data is also invalid:', e);
+          }
+        }
+        
+        // If all fails, show error
+        alert('❌ Failed to load quiz. Please check your connection and try again.');
+      }
     };
   
     loadQuiz();
