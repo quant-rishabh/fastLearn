@@ -138,18 +138,23 @@ export default function Home() {
           <span role="img" aria-label="bolt">⚡</span> Quick Learn Quiz
         </h1>
         <div className="flex gap-2 mt-2">
+          <Link href="/">
+            <button className="px-4 py-2 bg-purple-600 text-white rounded-lg shadow hover:bg-purple-700 transition-all text-sm font-semibold border border-purple-500">
+              Home
+            </button>
+          </Link>
           <Link href="/settings">
-            <button className="px-4 py-2 bg-purple-800 text-purple-200 rounded-lg shadow hover:bg-purple-700 hover:text-white transition-all text-sm font-semibold border border-purple-700">
+            <button className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg shadow hover:bg-purple-700 hover:text-white transition-all text-sm font-semibold border border-gray-600">
               Settings
             </button>
           </Link>
           <Link href="/admin">
-            <button className="px-4 py-2 bg-gray-800 text-purple-200 rounded-lg shadow hover:bg-purple-800 hover:text-white transition-all text-sm font-semibold border border-purple-700">
+            <button className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg shadow hover:bg-purple-700 hover:text-white transition-all text-sm font-semibold border border-gray-600">
               Admin Panel
             </button>
           </Link>
           <Link href="/progress">
-            <button className="px-4 py-2 bg-green-800 text-green-200 rounded-lg shadow hover:bg-green-900 hover:text-white transition-all text-sm font-semibold border border-green-700">
+            <button className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg shadow hover:bg-purple-700 hover:text-white transition-all text-sm font-semibold border border-gray-600">
               Progress
             </button>
           </Link>
