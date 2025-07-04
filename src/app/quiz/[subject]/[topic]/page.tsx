@@ -117,8 +117,26 @@ useEffect(() => {
       setUserAnswers(newAnswers);
       setInputValue('');
       
-      // Auto-submit if this is the last answer needed
-      if (newAnswers.length === totalExpected) {
+      // Check if this answer is wrong for multi-answer questions
+      if (totalExpected > 1) {
+        const isCurrentAnswerCorrect = isAnswerCorrect(trimmed.toLowerCase());
+        if (!isCurrentAnswerCorrect) {
+          // If any answer is wrong in multi-answer, submit immediately to show feedback
+          setTimeout(() => {
+            handleSubmit(newAnswers);
+          }, 0);
+          return;
+        }
+      }
+      
+      // For single answer questions, submit immediately after adding
+      if (totalExpected === 1) {
+        setTimeout(() => {
+          handleSubmit(newAnswers);
+        }, 0);
+      }
+      // For multi-answer questions, auto-submit if this is the last answer needed
+      else if (newAnswers.length === totalExpected) {
         setTimeout(() => {
           handleSubmit(newAnswers);
         }, 0);
@@ -126,19 +144,45 @@ useEffect(() => {
     }
   };
 
+  // Function to check if an individual answer is correct
+  const isAnswerCorrect = (answer: string) => {
+    const correctAnswer = questions[currentIndex]?.answer || '';
+    const expectedAnswers = correctAnswer
+      .split('@')
+      .map((a) => a.trim().toLowerCase())
+      .filter(Boolean);
+    const savedThreshold = Number(localStorage.getItem('fuzzy_threshold') || '0.4');
+    return expectedAnswers.some(expected => 
+      isFuzzyMatchArray([answer], [expected], savedThreshold)
+    );
+  };
+
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && inputValue.trim()) {
       e.preventDefault();
-      handleAddAnswer();
       
-      // Check if this will be the last answer needed
-      if (userAnswers.length + 1 === totalExpected) {
-        // Auto-submit after adding the final answer
-        setTimeout(() => {
-          const finalAnswers = [...userAnswers, inputValue.trim().toLowerCase()];
-          setUserAnswers(finalAnswers);
-          handleSubmit(finalAnswers);
-        }, 0);
+      if (totalExpected === 1) {
+        // For single answer, submit directly
+        const answer = inputValue.trim().toLowerCase();
+        setUserAnswers([answer]);
+        handleSubmit([answer]);
+      } else {
+        // For multi-answer, check if current answer is wrong first
+        const trimmed = inputValue.trim().toLowerCase();
+        const isCurrentAnswerCorrect = isAnswerCorrect(trimmed);
+        
+        if (!isCurrentAnswerCorrect) {
+          // If answer is wrong, add it and submit immediately
+          const newAnswers = [...userAnswers, trimmed];
+          setUserAnswers(newAnswers);
+          setInputValue('');
+          setTimeout(() => {
+            handleSubmit(newAnswers);
+          }, 0);
+        } else {
+          // If answer is correct, use normal add logic
+          handleAddAnswer();
+        }
       }
     }
   };
@@ -440,19 +484,29 @@ useEffect(() => {
           {!hasSubmitted && (
             <>
               <div className="flex flex-wrap gap-2 mb-2">
-                {userAnswers.map((ans, idx) => (
-                  <span key={idx} className="bg-purple-800 text-white px-3 py-1 rounded-full flex items-center gap-1">
-                    {ans}
-                    <button
-                      type="button"
-                      className="ml-1 text-xs text-red-300 hover:text-red-500"
-                      onClick={() => handleRemoveAnswer(idx)}
-                      aria-label="Remove answer"
+                {userAnswers.map((ans, idx) => {
+                  const isCorrect = isAnswerCorrect(ans);
+                  return (
+                    <span 
+                      key={idx} 
+                      className={`px-3 py-1 rounded-full flex items-center gap-1 text-white ${
+                        isCorrect 
+                          ? 'bg-green-700 border border-green-500' 
+                          : 'bg-red-700 border border-red-500'
+                      }`}
                     >
-                      ×
-                    </button>
-                  </span>
-                ))}
+                      {isCorrect ? '✅' : '❌'} {ans}
+                      <button
+                        type="button"
+                        className="ml-1 text-xs text-white hover:text-gray-200"
+                        onClick={() => handleRemoveAnswer(idx)}
+                        aria-label="Remove answer"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  );
+                })}
               </div>
               <div className="flex gap-2 mb-4">
                 <input
