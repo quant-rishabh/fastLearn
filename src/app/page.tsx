@@ -26,25 +26,13 @@ interface Topic {
 }
 
 export default function Home() {
-  // Tab state
-  const [activeTab, setActiveTab] = useState('dashboard');
-
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [subjectSlug, setSubjectSlug] = useState('');
   const [topics, setTopics] = useState<Topic[]>([]);
   const [topicName, setTopicName] = useState('');
-
-  const [threshold, setThreshold] = useState(0.3); // default
-  const [shuffleEnabled, setShuffleEnabled] = useState(false);
-
-  const [autoSpeak, setAutoSpeak] = useState(false);
-  const [fetchFromDb, setFetchFromDb] = useState(true); // default: true
-
+  const [fetchFromDb, setFetchFromDb] = useState(true);
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
-
-  const [timerSeconds, setTimerSeconds] = useState(20); // default timer value
-  const [practiceCount, setPracticeCount] = useState(2); // default spaced repetition count
 
   useEffect(() => {
     const stored = localStorage.getItem('fetch_from_db');
@@ -55,31 +43,6 @@ export default function Home() {
     setFetchFromDb(val);
     localStorage.setItem('fetch_from_db', String(val));
   };
-
-  useEffect(() => {
-    const saved = localStorage.getItem('auto_speak');
-    if (saved !== null) {
-      setAutoSpeak(saved === 'true');
-    }
-  }, []);
-
-  useEffect(() => {
-    const storedThreshold = localStorage.getItem('fuzzy_threshold');
-    const storedShuffle = localStorage.getItem('shuffle_enabled');
-
-    if (storedThreshold) setThreshold(parseFloat(storedThreshold));
-    if (storedShuffle) setShuffleEnabled(storedShuffle === 'true');
-  }, []);
-
-  useEffect(() => {
-    const storedTimer = localStorage.getItem('quiz_timer_seconds');
-    if (storedTimer) setTimerSeconds(Number(storedTimer));
-  }, []);
-
-  useEffect(() => {
-    const storedPractice = localStorage.getItem('practice_count');
-    if (storedPractice) setPracticeCount(Number(storedPractice));
-  }, []);
 
   // Load subjects
   useEffect(() => {
@@ -132,26 +95,6 @@ export default function Home() {
     fetchTopics();
   }, [subjectSlug, subjects, fetchFromDb]);
 
-  const handleSaveSettings = () => {
-    localStorage.setItem('fuzzy_threshold', threshold.toString());
-    localStorage.setItem('shuffle_enabled', shuffleEnabled.toString());
-    localStorage.setItem('auto_speak', String(autoSpeak));
-    localStorage.setItem('quiz_timer_seconds', timerSeconds.toString());
-    localStorage.setItem('practice_count', practiceCount.toString()); // save spaced repetition
-    setToastMsg('✅ Settings saved!');
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 2000);
-  };
-
-  const handleClearStorage = () => {
-    if (confirm('⚠️ Are you sure you want to clear all cached data? This cannot be undone.')) {
-      localStorage.clear();
-      setToastMsg('🧹 LocalStorage cleared!');
-      setShowToast(true);
-      setTimeout(() => location.reload(), 1200);
-    }
-  };
-
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 p-0 text-gray-100">
       {/* Sticky Header */}
@@ -160,6 +103,11 @@ export default function Home() {
           <span role="img" aria-label="bolt">⚡</span> Quick Learn Quiz
         </h1>
         <div className="flex gap-2 mt-2">
+          <Link href="/settings">
+            <button className="px-4 py-2 bg-purple-800 text-purple-200 rounded-lg shadow hover:bg-purple-700 hover:text-white transition-all text-sm font-semibold border border-purple-700">
+              Settings
+            </button>
+          </Link>
           <Link href="/admin">
             <button className="px-4 py-2 bg-gray-800 text-purple-200 rounded-lg shadow hover:bg-purple-800 hover:text-white transition-all text-sm font-semibold border border-purple-700">
               Admin Panel
@@ -174,102 +122,6 @@ export default function Home() {
       </header>
 
       <div className="max-w-md mx-auto mt-6 px-2">
-        {/* Settings Accordion */}
-        <details className="mb-6 rounded-lg border border-gray-800 bg-gray-900 shadow-sm" open>
-          <summary className="cursor-pointer px-4 py-3 font-semibold text-purple-300 select-none flex items-center gap-2">
-            <span role="img" aria-label="settings">⚙️</span> Settings
-          </summary>
-          <div className="px-4 pb-4 pt-2">
-            <label className="block text-sm mb-1 font-medium text-purple-200">Fuzzy Match Threshold (0 = strict, 1 = lenient)</label>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={threshold}
-              onChange={(e) => setThreshold(parseFloat(e.target.value))}
-              className="w-full mb-2 accent-purple-500"
-            />
-            <div className="text-xs text-purple-400 mb-4">Current: {threshold}</div>
-
-            <div className="flex items-center mb-3">
-              <input
-                id="shuffle"
-                type="checkbox"
-                checked={shuffleEnabled}
-                onChange={(e) => setShuffleEnabled(e.target.checked)}
-                className="accent-purple-500"
-              />
-              <label htmlFor="shuffle" className="ml-2 text-sm text-purple-200">Shuffle Questions</label>
-              <span className="ml-2 text-xs text-purple-400">{shuffleEnabled ? 'Enabled' : 'Disabled'}</span>
-            </div>
-
-            <div className="flex items-center mb-3">
-              <input
-                id="autoSpeak"
-                type="checkbox"
-                checked={autoSpeak}
-                onChange={(e) => setAutoSpeak(e.target.checked)}
-                className="accent-purple-500"
-              />
-              <label htmlFor="autoSpeak" className="ml-2 text-sm text-purple-200">Auto Speak Question on Load</label>
-            </div>
-
-            <div className="flex items-center mb-4">
-              <input
-                id="fetchDb"
-                type="checkbox"
-                checked={fetchFromDb}
-                onChange={(e) => handleToggleDbFetch(e.target.checked)}
-                className="accent-purple-500"
-              />
-              <label htmlFor="fetchDb" className="ml-2 text-sm text-purple-200">Fetch latest from DB (Overwrite cache)</label>
-            </div>
-
-            {/* Timer Setting */}
-            <div className="mb-4">
-              <label className="block text-sm mb-1 font-medium text-purple-200" htmlFor="timerSeconds">
-                Per-Question Timer (seconds)
-              </label>
-              <input
-                id="timerSeconds"
-                type="number"
-                min={5}
-                max={120}
-                step={1}
-                value={timerSeconds}
-                onChange={(e) => setTimerSeconds(Number(e.target.value))}
-                className="w-full p-2 border border-gray-700 rounded-lg bg-gray-900 text-purple-100 shadow mb-1"
-              />
-              <div className="text-xs text-purple-400">Current: {timerSeconds} seconds</div>
-            </div>
-            {/* Spaced Repetition Setting */}
-            <div className="mb-4">
-              <label className="block text-sm mb-1 font-medium text-purple-200" htmlFor="practiceCount">
-                Practice Each Missed Question (Spaced Repetition)
-              </label>
-              <input
-                id="practiceCount"
-                type="number"
-                min={1}
-                max={5}
-                step={1}
-                value={practiceCount}
-                onChange={(e) => setPracticeCount(Number(e.target.value))}
-                className="w-full p-2 border border-gray-700 rounded-lg bg-gray-900 text-purple-100 shadow mb-1"
-              />
-              <div className="text-xs text-purple-400">Current: {practiceCount} times</div>
-            </div>
-
-            <button
-              onClick={handleSaveSettings}
-              className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-2 rounded-lg font-semibold shadow hover:from-purple-800 hover:to-indigo-800 hover:scale-105 transition-all"
-            >
-              💾 Save Settings
-            </button>
-          </div>
-        </details>
-
         {/* Subject Dropdown */}
         <div className="mb-4">
           <label className="block mb-2 font-medium text-purple-300">📘 Select Subject:</label>
@@ -321,12 +173,6 @@ export default function Home() {
                 📖 Learn
               </button>
             </Link>
-            <button
-              onClick={handleClearStorage}
-              className="w-full bg-gradient-to-r from-red-600 to-pink-500 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-red-700 hover:to-pink-600 transition-all flex items-center justify-center gap-2 mt-2"
-            >
-              🧹 Clear Local Storage
-            </button>
           </div>
         )}
       </div>
