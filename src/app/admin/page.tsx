@@ -44,7 +44,7 @@ const [imageAfter, setImageAfter] = useState<string | null>(null);
 
 const [questions, setQuestions] = useState<Question[]>([]);
 
-const [inputMode, setInputMode] = useState<'form' | 'json'>('form');
+const [inputMode, setInputMode] = useState<'form' | 'json'>('json');
 const [bulkJson, setBulkJson] = useState('');
 
 const [message, setMessage] = useState<string | null>(null);

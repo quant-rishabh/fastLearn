@@ -162,6 +162,20 @@ export default function Home() {
       </header>
 
       <div className="max-w-md mx-auto mt-6 px-2">
+        {/* External Links */}
+        <div className="mb-4 text-center flex gap-3 justify-center">
+          <a href="https://www.notion.so/English-Learning-21112dcedf448038b8e1f686d2c8d4c2" target="_blank" rel="noopener noreferrer">
+            <button className="px-6 py-3 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-all font-semibold border border-blue-500">
+              📖 English Wiki
+            </button>
+          </a>
+          <a href="https://gemini.google.com/app/2e7322f53102b686?hl=en-IN" target="_blank" rel="noopener noreferrer">
+            <button className="px-6 py-3 bg-orange-600 text-white rounded-lg shadow hover:bg-orange-700 transition-all font-semibold border border-orange-500">
+              🎯 JAM Practice
+            </button>
+          </a>
+        </div>
+
         {/* Subject Dropdown */}
         <div className="mb-4">
           <label className="block mb-2 font-medium text-purple-300">📘 Select Subject:</label>
