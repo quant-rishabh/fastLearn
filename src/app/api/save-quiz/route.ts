@@ -5,6 +5,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const {
     subject,      // slug
+    lesson,       // name
     topic,        // name
     question,
     answer,
@@ -13,7 +14,7 @@ export async function POST(req: NextRequest) {
     imageAfter,
   } = body;
 
-  if (!subject || !topic || !question || !answer) {
+  if (!subject || !lesson || !topic || !question || !answer) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
@@ -28,19 +29,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Subject not found' }, { status: 404 });
   }
 
-  // Step 2: Get topic_id using subject_id + topic name
+  // Step 2: Get lesson_id using subject_id + lesson name
+  const { data: lessonData, error: lessonError } = await supabase
+    .from('lessons')
+    .select('id')
+    .eq('name', lesson)
+    .eq('subject_id', subjectData.id)
+    .single();
+
+  if (lessonError || !lessonData) {
+    return NextResponse.json({ error: 'Lesson not found' }, { status: 404 });
+  }
+
+  // Step 3: Get topic_id using lesson_id + topic name
   const { data: topicData, error: topicError } = await supabase
     .from('topics')
     .select('id')
     .eq('name', topic)
-    .eq('subject_id', subjectData.id)
+    .eq('lesson_id', lessonData.id)
     .single();
 
   if (topicError || !topicData) {
     return NextResponse.json({ error: 'Topic not found' }, { status: 404 });
   }
 
-  // Step 3: Insert question
+  // Step 4: Insert question
   const { error: insertError } = await supabase.from('questions').insert({
     topic_id: topicData.id,
     question,

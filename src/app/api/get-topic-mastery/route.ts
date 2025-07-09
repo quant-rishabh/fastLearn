@@ -5,11 +5,12 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const subject = searchParams.get('subject');
+    const lesson = searchParams.get('lesson');
     const topic = searchParams.get('topic');
 
-    if (!subject || !topic) {
+    if (!subject || !lesson || !topic) {
       return NextResponse.json(
-        { error: 'Missing required fields: subject, topic' },
+        { error: 'Missing required fields: subject, lesson, topic' },
         { status: 400 }
       );
     }
@@ -29,12 +30,28 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Get lesson ID from name + subject
+    const { data: lessonData, error: lessonError } = await supabase
+      .from('lessons')
+      .select('id')
+      .eq('name', lesson)
+      .eq('subject_id', subjectData.id)
+      .single();
+
+    if (lessonError || !lessonData) {
+      console.error('Lesson not found:', lesson, lessonError);
+      return NextResponse.json(
+        { error: 'Lesson not found' },
+        { status: 404 }
+      );
+    }
+
     // Get the topic with mastery count
     const { data: topicData, error: topicError } = await supabase
       .from('topics')
       .select('id, name, mastery_count, last_mastered, updated_at')
       .eq('name', topic)
-      .eq('subject_id', subjectData.id)
+      .eq('lesson_id', lessonData.id)
       .single();
 
     if (topicError) {

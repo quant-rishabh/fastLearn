@@ -10,10 +10,16 @@ interface Subject {
   slug: string;
 }
 
-interface Topic {
+interface Lesson {
   id: string;
   name: string;
   subject_id: string;
+}
+
+interface Topic {
+  id: string;
+  name: string;
+  lesson_id: string;
 }
 
 interface Question {
@@ -28,12 +34,15 @@ interface Question {
 
 export default function AdminPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [lessons, setLessons] = useState<Lesson[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
 
   // Form state
   const [subjectLabel, setSubjectLabel] = useState('');
   const [subjectSlug, setSubjectSlug] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
+  const [selectedLesson, setSelectedLesson] = useState('');
+  const [lessonName, setLessonName] = useState('');
   const [topicName, setTopicName] = useState('');
 
   const [question, setQuestion] = useState('');
@@ -59,7 +68,7 @@ const showMessage = (msg: string, duration = 3000) => {
 
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<'subject' | 'topic' | 'question' | 'edit' | 'deleteTopic'>('subject');
+  const [activeTab, setActiveTab] = useState<'subject' | 'lesson' | 'topic' | 'question' | 'edit' | 'deleteTopic'>('subject');
 
   // Load subjects for dropdowns
   useEffect(() => {
@@ -70,44 +79,49 @@ const showMessage = (msg: string, duration = 3000) => {
     fetchSubjects();
   }, []);
 
-  
+  // Load lessons when subject changes
+  useEffect(() => {
+    const fetchLessons = async () => {
+      const subject = subjects.find((s) => s.slug === selectedSubject);
+      if (!subject) {
+        setLessons([]);
+        return;
+      }
 
+      const { data, error } = await supabase
+        .from('lessons')
+        .select('*')
+        .eq('subject_id', subject.id);
+
+      if (!error && data) {
+        setLessons(data);
+      }
+    };
+
+    fetchLessons();
+  }, [selectedSubject, subjects]);
+
+  // Load topics when lesson changes
   useEffect(() => {
     const fetchTopics = async () => {
-      const subject = subjects.find((s) => s.slug === selectedSubject);
-      if (!subject) return;
-  
+      const lesson = lessons.find((l) => l.name === selectedLesson);
+      if (!lesson) {
+        setTopics([]);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('topics')
         .select('*')
-        .eq('subject_id', subject.id);
-  
+        .eq('lesson_id', lesson.id);
+
       if (!error && data) {
         setTopics(data);
       }
     };
-  
+
     fetchTopics();
-  }, [selectedSubject, subjects]);
-  
-  useEffect(() => {
-    const fetchTopics = async () => {
-      const subject = subjects.find((s) => s.slug === selectedSubject);
-      if (!subject) return;
-  
-      const { data, error } = await supabase
-        .from('topics')
-        .select('*')
-        .eq('subject_id', subject.id);
-  
-      if (!error && data) {
-        setTopics(data);
-        console.log('✅ Topics fetched:', data); // 🔍 Debug
-      }
-    };
-  
-    fetchTopics();
-  }, [selectedSubject, subjects]);
+  }, [selectedLesson, lessons]);
   
   // Handlers
   const handleAddSubject = async () => {
@@ -126,6 +140,75 @@ const showMessage = (msg: string, duration = 3000) => {
     }
   };
 
+  const handleAddLesson = async () => {
+    const subject = subjects.find((s) => s.slug === selectedSubject);
+    if (!subject || !lessonName) return;
+
+    const { error } = await supabase.from('lessons').insert({
+      name: lessonName,
+      subject_id: subject.id,
+    });
+
+    if (!error) {
+      setLessonName('');
+      showMessage('Lesson added ✅');
+      
+      // Refresh lessons list for the currently selected subject
+      const { data: updatedLessons } = await supabase
+        .from('lessons')
+        .select('*')
+        .eq('subject_id', subject.id);
+      
+      if (updatedLessons) {
+        setLessons(updatedLessons);
+      }
+    }
+  };
+
+  const handleDeleteLesson = async (lessonId: string, lessonName: string) => {
+    if (!window.confirm(`Are you sure you want to delete lesson '${lessonName}'? This will remove all related topics and questions!`)) return;
+
+    // 1. Get all topics for this lesson
+    const { data: topics, error: topicsError } = await supabase
+      .from('topics')
+      .select('id')
+      .eq('lesson_id', lessonId);
+    
+    if (topicsError) {
+      showMessage('❌ Failed to fetch topics');
+      return;
+    }
+
+    // 2. Delete all questions for each topic
+    if (topics && topics.length > 0) {
+      for (const topic of topics) {
+        await supabase.from('questions').delete().eq('topic_id', topic.id);
+      }
+      // 3. Delete all topics for this lesson
+      await supabase.from('topics').delete().eq('lesson_id', lessonId);
+    }
+
+    // 4. Delete the lesson itself
+    const { error } = await supabase.from('lessons').delete().eq('id', lessonId);
+    
+    if (!error) {
+      showMessage('🗑️ Lesson deleted');
+      // Refresh lessons list
+      const subject = subjects.find((s) => s.slug === selectedSubject);
+      if (subject) {
+        const { data: updatedLessons } = await supabase
+          .from('lessons')
+          .select('*')
+          .eq('subject_id', subject.id);
+        if (updatedLessons) {
+          setLessons(updatedLessons);
+        }
+      }
+    } else {
+      showMessage('❌ Delete failed');
+    }
+  };
+
   const handleBulkSubmit = async () => {
     try {
       const parsed = JSON.parse(bulkJson);
@@ -136,10 +219,11 @@ const showMessage = (msg: string, duration = 3000) => {
       }
   
       const subject = subjects.find((s) => s.slug === selectedSubject);
+      const lesson = lessons.find((l) => l.name === selectedLesson);
       const topic = topics.find((t) => t.name === topicName);
   
-      if (!subject || !topic) {
-        showMessage("❌ Select subject & topic first.");
+      if (!subject || !lesson || !topic) {
+        showMessage("❌ Select subject, lesson & topic first.");
         return;
       }
   
@@ -174,6 +258,7 @@ const showMessage = (msg: string, duration = 3000) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         subject: selectedSubject,
+        lesson: selectedLesson,
         topic: topicName,
         question,
         answer,
@@ -193,7 +278,7 @@ const showMessage = (msg: string, duration = 3000) => {
       setNote('');
       setImageBefore(null);
       setImageAfter(null);
-      // setTopicName(''); // Do NOT reset topic, keep it selected
+      // Keep subject, lesson, and topic selected for easier bulk entry
     } else {
       showMessage(`❌ Error: ${result.error}`);
     }
@@ -201,23 +286,23 @@ const showMessage = (msg: string, duration = 3000) => {
   
 
   const handleAddTopic = async () => {
-    const subject = subjects.find((s) => s.slug === selectedSubject);
-    if (!subject || !topicName) return;
+    const lesson = lessons.find((l) => l.name === selectedLesson);
+    if (!lesson || !topicName) return;
 
     const { error } = await supabase.from('topics').insert({
       name: topicName,
-      subject_id: subject.id,
+      lesson_id: lesson.id,
     });
 
     if (!error) {
       setTopicName('');
       showMessage('Topic added ✅');
       
-      // Refresh topics list for the currently selected subject
+      // Refresh topics list for the currently selected lesson
       const { data: updatedTopics } = await supabase
         .from('topics')
         .select('*')
-        .eq('subject_id', subject.id);
+        .eq('lesson_id', lesson.id);
       
       if (updatedTopics) {
         setTopics(updatedTopics);
@@ -304,6 +389,10 @@ const handleImageInput = async (
           className={`px-5 py-2 rounded-lg font-semibold shadow border-2 transition-all duration-150 ${activeTab === 'subject' ? 'bg-blue-700 border-blue-400 text-white scale-105' : 'bg-gray-900 border-gray-700 text-blue-200 hover:bg-blue-900 hover:text-white'}`}
         >Add Subject</button>
         <button
+          onClick={() => setActiveTab('lesson')}
+          className={`px-5 py-2 rounded-lg font-semibold shadow border-2 transition-all duration-150 ${activeTab === 'lesson' ? 'bg-indigo-700 border-indigo-400 text-white scale-105' : 'bg-gray-900 border-gray-700 text-indigo-200 hover:bg-indigo-900 hover:text-white'}`}
+        >Add Lesson</button>
+        <button
           onClick={() => setActiveTab('topic')}
           className={`px-5 py-2 rounded-lg font-semibold shadow border-2 transition-all duration-150 ${activeTab === 'topic' ? 'bg-green-700 border-green-400 text-white scale-105' : 'bg-gray-900 border-gray-700 text-green-200 hover:bg-green-900 hover:text-white'}`}
         >Add Topic</button>
@@ -386,19 +475,18 @@ const handleImageInput = async (
         </div>
       )}
 
-      {/* Add Topic */}
-      {activeTab === 'topic' && (
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold mb-2">➕ Add New Topic</h2>
+      {/* Add Lesson */}
+      {activeTab === 'lesson' && (
+        <div className="mb-6 bg-gray-950/80 border border-gray-800 rounded-xl shadow-lg p-6">
+          <h2 className="text-lg font-semibold mb-4 text-purple-200">➕ Add New Lesson</h2>
+          
           <select
             value={selectedSubject}
             onChange={(e) => {
-                setSelectedSubject(e.target.value);
-                setTopicName(''); // ✅ Clear previous topic
-            }
-                
-            }
-            className="w-full p-2 border rounded mb-2"
+              setSelectedSubject(e.target.value);
+              setLessonName('');
+            }}
+            className="w-full p-3 border border-gray-700 rounded-lg mb-4 text-gray-100 bg-gray-900 focus:ring-2 focus:ring-purple-500 shadow"
           >
             <option value="">-- Select Subject --</option>
             {subjects.map((s) => (
@@ -407,33 +495,121 @@ const handleImageInput = async (
               </option>
             ))}
           </select>
+
           <input
-            placeholder="Topic Name (e.g. English Tense)"
+            placeholder="Lesson Name (e.g. Tenses, Formulas, DSA)"
+            value={lessonName}
+            onChange={(e) => setLessonName(e.target.value)}
+            className="w-full p-3 border border-gray-700 rounded-lg mb-4 text-gray-100 bg-gray-900 focus:ring-2 focus:ring-purple-500 shadow"
+          />
+
+          <button
+            onClick={handleAddLesson}
+            className="w-full bg-indigo-700 hover:bg-indigo-800 text-white py-3 rounded-lg font-bold shadow mb-6"
+          >
+            Add Lesson
+          </button>
+
+          {selectedSubject && (
+            <div className="mt-2">
+              <h3 className="text-base font-semibold mb-2 text-purple-300">Lessons for {subjects.find(s => s.slug === selectedSubject)?.label}</h3>
+              <ul className="divide-y divide-gray-800">
+                {lessons.map((l) => (
+                  <li key={l.id} className="flex items-center justify-between py-2">
+                    <span className="text-gray-100 font-medium">{l.name}</span>
+                    <button
+                      className="bg-red-700 hover:bg-red-800 text-white px-3 py-1 rounded text-xs font-bold shadow transition-all"
+                      onClick={() => handleDeleteLesson(l.id, l.name)}
+                    >Delete</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add Topic */}
+      {activeTab === 'topic' && (
+        <div className="mb-6 bg-gray-950/80 border border-gray-800 rounded-xl shadow-lg p-6">
+          <h2 className="text-lg font-semibold mb-4 text-purple-200">➕ Add New Topic</h2>
+          
+          <select
+            value={selectedSubject}
+            onChange={(e) => {
+              setSelectedSubject(e.target.value);
+              setSelectedLesson('');
+              setTopicName('');
+            }}
+            className="w-full p-3 border border-gray-700 rounded-lg mb-4 text-gray-100 bg-gray-900 focus:ring-2 focus:ring-purple-500 shadow"
+          >
+            <option value="">-- Select Subject --</option>
+            {subjects.map((s) => (
+              <option key={s.id} value={s.slug}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={selectedLesson}
+            onChange={(e) => {
+              setSelectedLesson(e.target.value);
+              setTopicName('');
+            }}
+            className="w-full p-3 border border-gray-700 rounded-lg mb-4 text-gray-100 bg-gray-900 focus:ring-2 focus:ring-purple-500 shadow"
+          >
+            <option value="">-- Select Lesson --</option>
+            {lessons.map((l) => (
+              <option key={l.id} value={l.name}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+
+          <input
+            placeholder="Topic Name (e.g. Present Perfect, Area, Arrays)"
             value={topicName}
             onChange={(e) => setTopicName(e.target.value)}
-            className="w-full p-2 border rounded mb-2"
+            className="w-full p-3 border border-gray-700 rounded-lg mb-4 text-gray-100 bg-gray-900 focus:ring-2 focus:ring-purple-500 shadow"
           />
+
           <button
             onClick={handleAddTopic}
-            className="w-full bg-green-600 text-white py-2 rounded"
+            className="w-full bg-green-700 hover:bg-green-800 text-white py-3 rounded-lg font-bold shadow mb-6"
           >
             Add Topic
           </button>
 
-          
+          {selectedLesson && (
+            <div className="mt-2">
+              <h3 className="text-base font-semibold mb-2 text-purple-300">Topics for {selectedLesson}</h3>
+              <ul className="divide-y divide-gray-800">
+                {topics.map((t) => (
+                  <li key={t.id} className="flex items-center justify-between py-2">
+                    <span className="text-gray-100 font-medium">{t.name}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
       {/* Add Question (Coming Next) */}
       {activeTab === 'question' && (
-  <div className="mb-6">
-    <h2 className="text-lg font-semibold mb-2">➕ Add Question</h2>
+  <div className="mb-6 bg-gray-950/80 border border-gray-800 rounded-xl shadow-lg p-6">
+    <h2 className="text-lg font-semibold mb-4 text-purple-200">➕ Add Question</h2>
 
-    {/* Subject & Topic Dropdowns (Always needed) */}
+    {/* Subject, Lesson & Topic Dropdowns */}
     <select
       value={selectedSubject}
-      onChange={(e) => setSelectedSubject(e.target.value)}
-      className="w-full p-2 border rounded mb-2"
+      onChange={(e) => {
+        setSelectedSubject(e.target.value);
+        setSelectedLesson('');
+        setTopicName('');
+      }}
+      className="w-full p-3 border border-gray-700 rounded-lg mb-4 text-gray-100 bg-gray-900 focus:ring-2 focus:ring-purple-500 shadow"
     >
       <option value="">-- Select Subject --</option>
       {subjects.map((s) => (
@@ -444,9 +620,25 @@ const handleImageInput = async (
     </select>
 
     <select
+      value={selectedLesson}
+      onChange={(e) => {
+        setSelectedLesson(e.target.value);
+        setTopicName('');
+      }}
+      className="w-full p-3 border border-gray-700 rounded-lg mb-4 text-gray-100 bg-gray-900 focus:ring-2 focus:ring-purple-500 shadow"
+    >
+      <option value="">-- Select Lesson --</option>
+      {lessons.map((l) => (
+        <option key={l.id} value={l.name}>
+          {l.name}
+        </option>
+      ))}
+    </select>
+
+    <select
       value={topicName}
       onChange={(e) => setTopicName(e.target.value)}
-      className="w-full p-2 border rounded mb-4"
+      className="w-full p-3 border border-gray-700 rounded-lg mb-4 text-gray-100 bg-gray-900 focus:ring-2 focus:ring-purple-500 shadow"
     >
       <option value="">-- Select Topic --</option>
       {topics.map((t) => (
@@ -589,16 +781,17 @@ const handleImageInput = async (
 )}
 
 {activeTab === 'deleteTopic' && (
-  <div className="mb-6">
-    <h2 className="text-lg font-semibold mb-2 text-red-600">🗑️ Delete Topic & All Questions</h2>
+  <div className="mb-6 bg-gray-950/80 border border-gray-800 rounded-xl shadow-lg p-6">
+    <h2 className="text-lg font-semibold mb-4 text-red-400">🗑️ Delete Topic & All Questions</h2>
 
     <select
       value={selectedSubject}
       onChange={(e) => {
         setSelectedSubject(e.target.value);
+        setSelectedLesson('');
         setTopicName('');
       }}
-      className="w-full p-2 border rounded mb-2"
+      className="w-full p-3 border border-gray-700 rounded-lg mb-4 text-gray-100 bg-gray-900 focus:ring-2 focus:ring-purple-500 shadow"
     >
       <option value="">-- Select Subject --</option>
       {subjects.map((s) => (
@@ -609,9 +802,25 @@ const handleImageInput = async (
     </select>
 
     <select
+      value={selectedLesson}
+      onChange={(e) => {
+        setSelectedLesson(e.target.value);
+        setTopicName('');
+      }}
+      className="w-full p-3 border border-gray-700 rounded-lg mb-4 text-gray-100 bg-gray-900 focus:ring-2 focus:ring-purple-500 shadow"
+    >
+      <option value="">-- Select Lesson --</option>
+      {lessons.map((l) => (
+        <option key={l.id} value={l.name}>
+          {l.name}
+        </option>
+      ))}
+    </select>
+
+    <select
       value={topicName}
       onChange={(e) => setTopicName(e.target.value)}
-      className="w-full p-2 border rounded mb-4"
+      className="w-full p-3 border border-gray-700 rounded-lg mb-4 text-gray-100 bg-gray-900 focus:ring-2 focus:ring-purple-500 shadow"
     >
       <option value="">-- Select Topic --</option>
       {topics.map((t) => (
@@ -624,10 +833,11 @@ const handleImageInput = async (
     <button
       onClick={async () => {
         const subject = subjects.find((s) => s.slug === selectedSubject);
+        const lesson = lessons.find((l) => l.name === selectedLesson);
         const topic = topics.find((t) => t.name === topicName);
 
-        if (!subject || !topic) {
-          showMessage('❌ Select both subject and topic');
+        if (!subject || !lesson || !topic) {
+          showMessage('❌ Select subject, lesson, and topic');
           return;
         }
 
@@ -648,19 +858,21 @@ const handleImageInput = async (
           showMessage('🗑️ Topic and its questions deleted');
           setTopicName('');
 
+          // Refresh topics list for the currently selected lesson
           const { data: updatedTopics } = await supabase
             .from('topics')
             .select('*')
-            .eq('subject_id', subject.id);
+            .eq('lesson_id', lesson.id);
           setTopics(updatedTopics || []);
 
-          localStorage.removeItem(`quiz_${selectedSubject}_${encodeURIComponent(topic.name)}`);
+          // Clear cache for this topic
+          localStorage.removeItem(`quiz_${selectedSubject}_${selectedLesson}_${encodeURIComponent(topic.name)}`);
         } else {
           showMessage('❌ Delete failed');
           console.error({ qError, tError });
         }
       }}
-      className="w-full bg-red-600 text-white py-2 rounded hover:bg-red-500"
+      className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg font-bold shadow transition-all"
     >
       Delete Topic & All Questions
     </button>
@@ -672,23 +884,42 @@ const handleImageInput = async (
 
       {/* Edit Questions (Coming Next) */}
       {activeTab === 'edit' && (
-  <div className="mb-6">
-    <h2 className="text-lg font-semibold mb-2">🗂️ Manage Questions (Delete Only)</h2>
+  <div className="mb-6 bg-gray-950/80 border border-gray-800 rounded-xl shadow-lg p-6">
+    <h2 className="text-lg font-semibold mb-4 text-purple-200">🗂️ Manage Questions (Delete Only)</h2>
 
     {/* Subject Dropdown */}
     <select
       value={selectedSubject}
       onChange={(e) => {
         setSelectedSubject(e.target.value);
+        setSelectedLesson('');
         setTopicName('');
         setQuestions([]);
       }}
-      className="w-full p-2 border rounded mb-2"
+      className="w-full p-3 border border-gray-700 rounded-lg mb-4 text-gray-100 bg-gray-900 focus:ring-2 focus:ring-purple-500 shadow"
     >
       <option value="">-- Select Subject --</option>
       {subjects.map((s) => (
         <option key={s.id} value={s.slug}>
           {s.label}
+        </option>
+      ))}
+    </select>
+
+    {/* Lesson Dropdown */}
+    <select
+      value={selectedLesson}
+      onChange={(e) => {
+        setSelectedLesson(e.target.value);
+        setTopicName('');
+        setQuestions([]);
+      }}
+      className="w-full p-3 border border-gray-700 rounded-lg mb-4 text-gray-100 bg-gray-900 focus:ring-2 focus:ring-purple-500 shadow"
+    >
+      <option value="">-- Select Lesson --</option>
+      {lessons.map((l) => (
+        <option key={l.id} value={l.name}>
+          {l.name}
         </option>
       ))}
     </select>
@@ -700,14 +931,14 @@ const handleImageInput = async (
         const topicValue = e.target.value;
         setTopicName(topicValue);
 
-        const subject = subjects.find((s) => s.slug === selectedSubject);
-        if (!subject) return;
+        const lesson = lessons.find((l) => l.name === selectedLesson);
+        if (!lesson) return;
 
         const { data: topic } = await supabase
           .from('topics')
           .select('id')
           .eq('name', topicValue)
-          .eq('subject_id', subject.id)
+          .eq('lesson_id', lesson.id)
           .single();
 
         if (!topic) return;
@@ -719,7 +950,7 @@ const handleImageInput = async (
 
         setQuestions(qs || []);
       }}
-      className="w-full p-2 border rounded mb-4"
+      className="w-full p-3 border border-gray-700 rounded-lg mb-4 text-gray-100 bg-gray-900 focus:ring-2 focus:ring-purple-500 shadow"
     >
       <option value="">-- Select Topic --</option>
       {topics.map((t) => (

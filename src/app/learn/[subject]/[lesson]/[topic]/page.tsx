@@ -11,14 +11,14 @@ interface Question {
 }
 
 export default function LearnPage() {
-  const { subject, topic } = useParams();
+  const { subject, lesson, topic } = useParams();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadQuestions = async () => {
       const fetchFromDb = localStorage.getItem('fetch_from_db') === 'true';
-      const cacheKey = `quiz_${subject}_${decodeURIComponent(topic as string)}`;
+      const cacheKey = `quiz_${subject}_${lesson}_${decodeURIComponent(topic as string)}`;
   
       if (!fetchFromDb) {
         const cached = localStorage.getItem(cacheKey);
@@ -32,7 +32,7 @@ export default function LearnPage() {
   
       // Fallback to API call
       console.log('🌐 Learn: Fetching quiz from DB');
-      const res = await fetch(`/api/get-quiz?subject=${subject}&topic=${decodeURIComponent(topic as string)}`);
+      const res = await fetch(`/api/get-quiz?subject=${subject}&lesson=${lesson}&topic=${decodeURIComponent(topic as string)}`);
       const { questions } = await res.json();
   
       setQuestions(questions || []);
@@ -43,7 +43,7 @@ export default function LearnPage() {
     };
   
     loadQuestions();
-  }, [subject, topic]);
+  }, [subject, lesson, topic]);
   
 
   if (loading) return <p className="p-4">Loading questions...</p>;
@@ -51,6 +51,13 @@ export default function LearnPage() {
   return (
     <main className="p-4 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">📘 Learn Mode: {topic}</h1>
+      
+      {/* Breadcrumb */}
+      <div className="mb-4 text-sm text-gray-600">
+        <span className="font-medium">
+          {String(subject).charAt(0).toUpperCase() + String(subject).slice(1)} → {String(lesson).charAt(0).toUpperCase() + String(lesson).slice(1)} → {String(topic).charAt(0).toUpperCase() + String(topic).slice(1)}
+        </span>
+      </div>
 
       <div className="flex gap-2 mb-6">
         <Link href="/">
@@ -58,7 +65,7 @@ export default function LearnPage() {
             ← Back to Home
           </button>
         </Link>
-        <Link href={`/quiz/${subject}/${encodeURIComponent(topic as string)}`}>
+        <Link href={`/quiz/${subject}/${lesson}/${encodeURIComponent(topic as string)}`}>
           <button className="bg-blue-700 text-white px-4 py-2 rounded hover:bg-blue-600">
             Start Quiz
           </button>

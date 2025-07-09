@@ -19,15 +19,23 @@ interface Subject {
   slug: string;
 }
 
-interface Topic {
+interface Lesson {
   id: string;
   name: string;
   subject_id: string;
 }
 
+interface Topic {
+  id: string;
+  name: string;
+  lesson_id: string;
+}
+
 export default function Home() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [subjectSlug, setSubjectSlug] = useState('');
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [selectedLesson, setSelectedLesson] = useState('');
   const [topics, setTopics] = useState<Topic[]>([]);
   const [topicName, setTopicName] = useState('');
   const [fetchFromDb, setFetchFromDb] = useState(true);
@@ -82,14 +90,74 @@ export default function Home() {
     loadSubjects();
   }, [fetchFromDb]);
 
-  // Load topics for selected subject
+  // Load lessons for selected subject
   useEffect(() => {
-    const fetchTopics = async () => {
-      if (!subjectSlug) return;
+    const fetchLessons = async () => {
+      if (!subjectSlug) {
+        setLessons([]);
+        setSelectedLesson('');
+        setTopics([]);
+        setTopicName('');
+        return;
+      }
+      
       const subject = subjects.find((s) => s.slug === subjectSlug);
       if (!subject) return;
 
-      const cacheKey = `topics_${subject.id}`;
+      const cacheKey = `lessons_${subject.id}`;
+      const fetchFromDb = localStorage.getItem('fetch_from_db') === 'true';
+
+      // Cache Mode: Use cache if available, only fetch if cache is empty
+      if (!fetchFromDb) {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached && cached !== 'undefined') {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setLessons(parsed);
+              return; // Exit early, don't fetch from DB
+            }
+          } catch (e) {
+            console.error('❌ Failed to parse cached lessons:', e);
+          }
+        }
+      }
+
+      // Fresh Mode: Always fetch from DB, or Cache Mode fallback
+      try {
+        const { data, error } = await supabase
+          .from('lessons')
+          .select('*')
+          .eq('subject_id', subject.id);
+
+        if (!error && data) {
+          setLessons(data);
+          // Always update cache when we fetch from DB
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        } else {
+          console.error('Failed to fetch lessons:', error);
+        }
+      } catch (error) {
+        console.error('❌ Database error:', error);
+      }
+    };
+
+    fetchLessons();
+  }, [subjectSlug, subjects, fetchFromDb]);
+
+  // Load topics for selected lesson
+  useEffect(() => {
+    const fetchTopics = async () => {
+      if (!selectedLesson) {
+        setTopics([]);
+        setTopicName('');
+        return;
+      }
+      
+      const lesson = lessons.find((l) => l.name === selectedLesson);
+      if (!lesson) return;
+
+      const cacheKey = `topics_${lesson.id}`;
       const fetchFromDb = localStorage.getItem('fetch_from_db') === 'true';
 
       // Cache Mode: Use cache if available, only fetch if cache is empty
@@ -113,7 +181,7 @@ export default function Home() {
         const { data, error } = await supabase
           .from('topics')
           .select('*')
-          .eq('subject_id', subject.id);
+          .eq('lesson_id', lesson.id);
 
         if (!error && data) {
           setTopics(data);
@@ -128,7 +196,7 @@ export default function Home() {
     };
 
     fetchTopics();
-  }, [subjectSlug, subjects, fetchFromDb]);
+  }, [selectedLesson, lessons, fetchFromDb]);
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 p-0 text-gray-100">
@@ -186,7 +254,11 @@ export default function Home() {
           <label className="block mb-2 font-medium text-purple-300">📘 Select Subject:</label>
           <select
             value={subjectSlug}
-            onChange={(e) => setSubjectSlug(e.target.value)}
+            onChange={(e) => {
+              setSubjectSlug(e.target.value);
+              setSelectedLesson('');
+              setTopicName('');
+            }}
             className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 bg-gray-950 text-purple-100 shadow-sm"
           >
             <option value="" className="text-gray-400">-- Choose Subject --</option>
@@ -199,6 +271,28 @@ export default function Home() {
               ))}
           </select>
         </div>
+
+        {/* Lesson Dropdown */}
+        {lessons.length > 0 && (
+          <div className="mb-4">
+            <label className="block mb-2 font-medium text-purple-300">📝 Select Lesson:</label>
+            <select
+              value={selectedLesson}
+              onChange={(e) => {
+                setSelectedLesson(e.target.value);
+                setTopicName('');
+              }}
+              className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 bg-gray-950 text-purple-100 shadow-sm"
+            >
+              <option value="" className="text-gray-400">-- Choose Lesson --</option>
+              {lessons.map((lesson) => (
+                <option key={lesson.id} value={lesson.name} className="text-gray-900 bg-purple-100">
+                  {lesson.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Topic Dropdown */}
         {topics.length > 0 && (
@@ -220,14 +314,14 @@ export default function Home() {
         )}
 
         {/* Start Quiz & Learn Buttons */}
-        {subjectSlug && topicName && (
+        {subjectSlug && selectedLesson && topicName && (
           <div className="flex flex-col gap-3 mt-4">
-            <Link href={`/quiz/${subjectSlug}/${encodeURIComponent(topicName)}`}>
+            <Link href={`/quiz/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
               <button className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all flex items-center justify-center gap-2">
                 ▶️ Start Quiz
               </button>
             </Link>
-            <Link href={`/learn/${subjectSlug}/${encodeURIComponent(topicName)}`}>
+            <Link href={`/learn/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
               <button className="w-full bg-gradient-to-r from-green-500 to-teal-400 text-gray-900 py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-green-600 hover:to-teal-500 transition-all flex items-center justify-center gap-2">
                 📖 Learn
               </button>

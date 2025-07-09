@@ -17,7 +17,7 @@ interface Question {
 
 
 export default function QuizPage() {
-  const { subject, topic } = useParams();
+  const { subject, lesson, topic } = useParams();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(-1); // Initialize to -1 to prevent premature TTS
   const [userAnswers, setUserAnswers] = useState<string[]>([]); // New: array of answers
@@ -58,7 +58,7 @@ export default function QuizPage() {
   
   useEffect(() => {
     const loadQuiz = async () => {
-      const cacheKey = `quiz_${subject}_${decodeURIComponent(topic as string)}`;
+      const cacheKey = `quiz_${subject}_${lesson}_${decodeURIComponent(topic as string)}`;
       const fetchFromDb = localStorage.getItem('fetch_from_db') === 'true';
   
       // Cache Mode (fetchFromDb = false): Use cache if available, only fetch if cache is empty
@@ -87,7 +87,7 @@ export default function QuizPage() {
       // Fresh Mode (fetchFromDb = true): Always fetch from DB, always update cache
       // OR Cache Mode fallback: Fetch from DB if cache was empty/invalid
       try {
-        const res = await fetch(`/api/get-quiz?subject=${subject}&topic=${decodeURIComponent(topic as string)}`);
+        const res = await fetch(`/api/get-quiz?subject=${subject}&lesson=${lesson}&topic=${decodeURIComponent(topic as string)}`);
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`);
         }
@@ -129,7 +129,7 @@ export default function QuizPage() {
     };
   
     loadQuiz();
-  }, [subject, topic]);  
+  }, [subject, lesson, topic]);  
 
 const spokenIndexRef = useRef<number | null>(null);
 
@@ -399,6 +399,7 @@ useEffect(() => {
 
     const updateMastery = async () => {
       const subj = String(subject);
+      const les = String(lesson);
       const top = String(topic);
 
       try {
@@ -407,6 +408,7 @@ useEffect(() => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             subject: subj,
+            lesson: les,
             topic: decodeURIComponent(top),
             increment: 1,
           }),
@@ -425,7 +427,7 @@ useEffect(() => {
     };
 
     updateMastery();
-  }, [finished, subject, topic]);
+  }, [finished, subject, lesson, topic]);
 
   if (!Array.isArray(questions) || questions.length === 0 || currentIndex < 0)  {
     return <p className="p-4">Loading quiz...</p>;
@@ -478,6 +480,13 @@ useEffect(() => {
         <Link href="/" className="text-purple-400 underline text-sm mb-4 inline-block hover:text-purple-200 transition-colors">
           ← Back to Home
         </Link>
+
+        {/* Breadcrumb */}
+        <div className="mb-4 text-center">
+          <span className="text-sm text-gray-400">
+            {String(subject).charAt(0).toUpperCase() + String(subject).slice(1)} → {String(lesson).charAt(0).toUpperCase() + String(lesson).slice(1)} → {String(topic).charAt(0).toUpperCase() + String(topic).slice(1)}
+          </span>
+        </div>
 
         {/* Questions Remaining */}
         <div className="mb-4 text-center">

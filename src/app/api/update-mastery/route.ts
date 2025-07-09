@@ -3,13 +3,13 @@ import { supabase } from '@/utils/supabase';
 
 export async function POST(request: NextRequest) {
   try {
-    const { subject, topic, increment } = await request.json();
+    const { subject, lesson, topic, increment } = await request.json();
     
-    console.log('📊 Update mastery request:', { subject, topic, increment });
+    console.log('📊 Update mastery request:', { subject, lesson, topic, increment });
 
-    if (!subject || !topic || !increment) {
+    if (!subject || !lesson || !topic || !increment) {
       return NextResponse.json(
-        { error: 'Missing required fields: subject, topic, increment' },
+        { error: 'Missing required fields: subject, lesson, topic, increment' },
         { status: 400 }
       );
     }
@@ -29,12 +29,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get lesson ID from name + subject
+    const { data: lessonData, error: lessonError } = await supabase
+      .from('lessons')
+      .select('id')
+      .eq('name', lesson)
+      .eq('subject_id', subjectData.id)
+      .single();
+
+    if (lessonError || !lessonData) {
+      console.error('Lesson not found:', lesson, lessonError);
+      return NextResponse.json(
+        { error: 'Lesson not found' },
+        { status: 404 }
+      );
+    }
+
     // Get the topic with current mastery count
     const { data: currentData, error: fetchError } = await supabase
       .from('topics')
       .select('id, mastery_count')
       .eq('name', topic)
-      .eq('subject_id', subjectData.id)
+      .eq('lesson_id', lessonData.id)
       .single();
 
     if (fetchError) {
@@ -46,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!currentData) {
-      console.warn(`Topic not found: ${subject}/${topic}`);
+      console.warn(`Topic not found: ${subject}/${lesson}/${topic}`);
       return NextResponse.json(
         { error: 'Topic not found' },
         { status: 404 }

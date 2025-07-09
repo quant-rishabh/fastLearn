@@ -3,16 +3,19 @@ import { supabase } from '@/utils/supabase';
 
 export async function GET(request: NextRequest) {
   try {
-    // Fetch all topics with their mastery counts and subject information
+    // Fetch all topics with their mastery counts, lesson information, and subject information
     const { data, error } = await supabase
       .from('topics')
       .select(`
         name,
         mastery_count,
         last_mastered,
-        subjects (
-          label,
-          slug
+        lessons (
+          name,
+          subjects (
+            label,
+            slug
+          )
         )
       `)
       .order('mastery_count', { ascending: false });
@@ -30,8 +33,9 @@ export async function GET(request: NextRequest) {
       topic_name: topic.name,
       mastery_count: topic.mastery_count || 0,
       last_mastered: topic.last_mastered,
-      subject_label: topic.subjects?.label || 'Unknown Subject',
-      subject_slug: topic.subjects?.slug || 'unknown'
+      lesson_name: topic.lessons?.name || 'Unknown Lesson',
+      subject_label: topic.lessons?.subjects?.label || 'Unknown Subject',
+      subject_slug: topic.lessons?.subjects?.slug || 'unknown'
     }));
 
     return NextResponse.json({ 

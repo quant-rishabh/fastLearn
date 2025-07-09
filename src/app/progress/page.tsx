@@ -6,6 +6,7 @@ import Link from "next/link";
 
 interface MasteryData {
   subject: string;
+  lesson: string;
   topic: string;
   count: number;
   subjectSlug: string;
@@ -29,6 +30,7 @@ export default function ProgressPage() {
           const masteryData: MasteryData[] = result.data.map((item: any) => ({
             subject: item.subject_label,
             subjectSlug: item.subject_slug,
+            lesson: item.lesson_name,
             topic: item.topic_name,
             count: item.mastery_count || 0
           }));
@@ -53,11 +55,12 @@ export default function ProgressPage() {
     sortOrder === "asc" ? a.count - b.count : b.count - a.count
   );
 
-  // Group topics by subject for table rendering
-  const grouped: { [subject: string]: MasteryData[] } = {};
+  // Group topics by subject and lesson for table rendering
+  const grouped: { [subject: string]: { [lesson: string]: MasteryData[] } } = {};
   for (const row of sorted) {
-    if (!grouped[row.subject]) grouped[row.subject] = [];
-    grouped[row.subject].push(row);
+    if (!grouped[row.subject]) grouped[row.subject] = {};
+    if (!grouped[row.subject][row.lesson]) grouped[row.subject][row.lesson] = [];
+    grouped[row.subject][row.lesson].push(row);
   }
 
   if (loading) {
@@ -98,48 +101,55 @@ export default function ProgressPage() {
             Low → High
           </button>
         </div>
-        {/* Table per subject */}
+        {/* Tables per subject and lesson */}
         {Object.keys(grouped).length === 0 ? (
           <div className="p-6 text-center text-gray-400 text-base">No subjects or topics found.</div>
         ) : (
           Object.entries(grouped)
             .sort(([a], [b]) => a.localeCompare(b))
-            .map(([subject, rows]) => (
+            .map(([subject, lessons]) => (
               <div key={subject} className="mb-8">
-                <h3 className="text-lg font-bold text-purple-200 mb-2 px-2">{subject}</h3>
-                <div className="overflow-x-auto rounded-xl border border-gray-800 bg-gray-950/90 shadow-lg">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-900 text-purple-200">
-                        <th className="p-3 text-left">Topic</th>
-                        <th className="p-3 text-right">Mastery</th>
-                        <th className="p-3 text-center">&nbsp;</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.length === 0 ? (
-                        <tr>
-                          <td colSpan={3} className="p-4 text-center text-gray-400">No topics found.</td>
-                        </tr>
-                      ) : (
-                        rows.map((row, idx) => (
-                          <tr key={idx} className="border-t border-gray-800 hover:bg-gray-900/60">
-                            <td className="p-3 text-gray-200 max-w-[120px] truncate">{row.topic}</td>
-                            <td className="p-3 text-right text-green-300 font-mono text-base">{row.count}</td>
-                            <td className="p-3 text-center">
-                              <Link
-                                href={`/quiz/${row.subjectSlug}/${encodeURIComponent(row.topic)}`}
-                                className="inline-block px-3 py-1 bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-lg font-bold text-xs shadow hover:from-purple-800 hover:to-indigo-800 hover:scale-105 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500"
-                              >
-                                Start
-                              </Link>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                <h3 className="text-lg font-bold text-purple-200 mb-4 px-2">{subject}</h3>
+                {Object.entries(lessons)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([lesson, rows]) => (
+                    <div key={`${subject}-${lesson}`} className="mb-6">
+                      <h4 className="text-md font-semibold text-cyan-300 mb-2 px-2">{lesson}</h4>
+                      <div className="overflow-x-auto rounded-xl border border-gray-800 bg-gray-950/90 shadow-lg">
+                        <table className="min-w-full text-sm">
+                          <thead>
+                            <tr className="bg-gray-900 text-purple-200">
+                              <th className="p-3 text-left">Topic</th>
+                              <th className="p-3 text-right">Mastery</th>
+                              <th className="p-3 text-center">&nbsp;</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.length === 0 ? (
+                              <tr>
+                                <td colSpan={3} className="p-4 text-center text-gray-400">No topics found.</td>
+                              </tr>
+                            ) : (
+                              rows.map((row, idx) => (
+                                <tr key={idx} className="border-t border-gray-800 hover:bg-gray-900/60">
+                                  <td className="p-3 text-gray-200 max-w-[120px] truncate">{row.topic}</td>
+                                  <td className="p-3 text-right text-green-300 font-mono text-base">{row.count}</td>
+                                  <td className="p-3 text-center">
+                                    <Link
+                                      href={`/quiz/${row.subjectSlug}/${encodeURIComponent(row.lesson)}/${encodeURIComponent(row.topic)}`}
+                                      className="inline-block px-3 py-1 bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-lg font-bold text-xs shadow hover:from-purple-800 hover:to-indigo-800 hover:scale-105 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    >
+                                      Start
+                                    </Link>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
               </div>
             ))
         )}
