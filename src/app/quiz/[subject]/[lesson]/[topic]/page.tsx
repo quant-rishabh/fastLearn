@@ -409,7 +409,15 @@ useEffect(() => {
     setHasSubmitted(false);
     setIsCorrect(null);
     setSessionQuestionNumber((prev) => prev + 1); // Increment session question number
-    
+
+    // --- Speech recognition: stop before changing question ---
+    if (globalSpeechEnabled && speechSupported && recognitionRef.current && isListening) {
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        console.error('Failed to stop recognition before next question:', error);
+      }
+    }
     // If no more questions, finish
     if (remainingQuestions.length === 0) {
       setFinished(true);
@@ -432,11 +440,18 @@ useEffect(() => {
 
     // Just pick the next question in the current order (no shuffle here)
     setCurrentIndex(remainingQuestions[0]);
-    
-    // Clear input value again after setting new question and focus input
+
+    // --- Speech recognition: restart after question is set ---
     setTimeout(() => {
       setInputValue(''); // Clear input value again to ensure it's empty
       inputRef.current?.focus();
+      if (globalSpeechEnabled && speechSupported && recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+        } catch (error) {
+          console.error('Failed to start recognition after next question:', error);
+        }
+      }
     }, 100);
   };
 
