@@ -6,6 +6,14 @@ import { isFuzzyMatchArray } from '@/utils/fuzzyMatch';
 import Link from 'next/link';
 import { useRef } from 'react';
 
+// Type declarations for Speech Recognition API
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+}
+
 
 interface Question {
   question: string;
@@ -33,7 +41,22 @@ export default function QuizPage() {
   // Track indices of questions not yet answered correctly
   const [remainingQuestions, setRemainingQuestions] = useState<number[]>([]);
 
+  // Mobile detection - calculate once to prevent repeated checks
+  const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  
+  // Speech recognition states
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const [globalSpeechEnabled, setGlobalSpeechEnabled] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const finishedRef = useRef<boolean>(false);
+
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Keep finishedRef in sync with finished state
+  useEffect(() => {
+    finishedRef.current = finished;
+  }, [finished]);
 
   // On questions load, initialize remainingQuestions with all indices, shuffled (no repetition at start)
   useEffect(() => {
@@ -129,7 +152,138 @@ export default function QuizPage() {
     };
   
     loadQuiz();
-  }, [subject, lesson, topic]);  
+  }, [subject, lesson, topic]);
+
+  // Speech recognition setup
+  useEffect(() => {
+    // Load global speech setting from localStorage
+    const savedGlobalSpeech = localStorage.getItem('global_speech_enabled') === 'true';
+    setGlobalSpeechEnabled(savedGlobalSpeech);
+    
+    // Check if speech recognition is supported
+    if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
+      setSpeechSupported(true);
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      
+      if (recognitionRef.current) {
+        // Mobile-specific configurations
+        recognitionRef.current.continuous = false; // Set to false for better mobile support
+        recognitionRef.current.interimResults = !isMobile; // Enable interim results only on desktop
+        recognitionRef.current.lang = 'en-US';
+        recognitionRef.current.maxAlternatives = 1;
+
+        recognitionRef.current.onstart = () => {
+          console.log('Speech recognition started');
+          setIsListening(true);
+        };
+
+        recognitionRef.current.onresult = (event: any) => {
+          let finalTranscript = '';
+          let interimTranscript = '';
+          
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            if (event.results[i].isFinal) {
+              finalTranscript += event.results[i][0].transcript;
+            } else {
+              interimTranscript += event.results[i][0].transcript;
+            }
+          }
+          
+          // Only update input for final transcript to prevent bouncing
+          if (finalTranscript) {
+            setInputValue(finalTranscript.trim());
+          } else if (interimTranscript && !isMobile) {
+            // Only show interim results on desktop and throttle updates
+            const trimmedInterim = interimTranscript.trim();
+            if (trimmedInterim.length > 2) { // Only update if meaningful text
+              setInputValue(trimmedInterim);
+            }
+          }
+        };
+
+        recognitionRef.current.onerror = (event: any) => {
+          console.error('Speech recognition error:', event.error);
+          setIsListening(false);
+          
+          // Handle specific mobile errors
+          if (event.error === 'not-allowed') {
+            alert('🎤 Microphone permission denied. Please enable microphone access in your browser settings.');
+          } else if (event.error === 'no-speech') {
+            console.log('No speech detected, will retry...');
+          } else if (event.error === 'network') {
+            console.log('Network error, speech recognition requires internet connection');
+          }
+        };
+
+        recognitionRef.current.onend = () => {
+          console.log('Speech recognition ended');
+          setIsListening(false);
+          
+          // Auto-restart if global speech is enabled - check localStorage and finishedRef for current values
+          setTimeout(() => {
+            const currentGlobalSpeech = localStorage.getItem('global_speech_enabled') === 'true';
+            const currentFinished = finishedRef.current;
+            
+            if (currentGlobalSpeech && !currentFinished && recognitionRef.current) {
+              try {
+                recognitionRef.current.start();
+                console.log('Auto-restarted speech recognition');
+              } catch (error) {
+                console.log('Auto-restart failed:', error);
+              }
+            }
+          }, 100);
+        };
+      }
+    } else {
+      // Check for mobile-specific speech recognition support
+      console.log('Speech recognition not supported. User agent:', navigator.userAgent);
+      setSpeechSupported(false);
+    }
+
+    // Cleanup: Stop speech recognition when component unmounts or user navigates away
+    return () => {
+      if (isListening && recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (error) {
+          console.error('Failed to stop recognition on cleanup:', error);
+        }
+      }
+    };
+  }, []);
+
+  // Add effect to manage global speech recognition
+  useEffect(() => {
+    if (!speechSupported || !recognitionRef.current) return;
+    
+    if (globalSpeechEnabled && !finished && !isListening) {
+      // Start listening when global speech is enabled
+      try {
+        recognitionRef.current.start();
+        console.log('Started speech recognition via useEffect');
+      } catch (error) {
+        console.error('Failed to start recognition:', error);
+      }
+    } else if (!globalSpeechEnabled && isListening) {
+      // Stop listening when global speech is disabled
+      try {
+        recognitionRef.current.stop();
+        console.log('Stopped speech recognition via useEffect');
+      } catch (error) {
+        console.error('Failed to stop recognition:', error);
+      }
+    }
+  }, [globalSpeechEnabled, finished, speechSupported]);
+
+  // Simple speech recognition toggle - no auto management
+  const toggleGlobalSpeech = () => {
+    const newValue = !globalSpeechEnabled;
+    
+    setGlobalSpeechEnabled(newValue);
+    localStorage.setItem('global_speech_enabled', newValue.toString());
+  };
 
 const spokenIndexRef = useRef<number | null>(null);
 
@@ -214,12 +368,12 @@ useEffect(() => {
           // If answer is wrong, add it and submit immediately
           const newAnswers = [...userAnswers, trimmed];
           setUserAnswers(newAnswers);
-          setInputValue('');
+          setInputValue(''); // Clear input field
           setTimeout(() => {
             handleSubmit(newAnswers);
           }, 0);
         } else {
-          // If answer is correct, use normal add logic
+          // If answer is correct, use normal add logic (which already clears input)
           handleAddAnswer();
         }
       }
@@ -234,22 +388,39 @@ useEffect(() => {
   const handleNext = () => {
     setTimerActive(false); // Stop timer on next
     setUserAnswers([]);
-    setInputValue('');
+    setInputValue(''); // Clear input value
     setHasSubmitted(false);
     setIsCorrect(null);
     setSessionQuestionNumber((prev) => prev + 1); // Increment session question number
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 100);
-
+    
     // If no more questions, finish
     if (remainingQuestions.length === 0) {
       setFinished(true);
+      
+      // Stop and disable global speech when quiz is finished
+      if (globalSpeechEnabled) {
+        setGlobalSpeechEnabled(false);
+        localStorage.setItem('global_speech_enabled', 'false');
+        if (isListening) {
+          try {
+            recognitionRef.current.stop();
+          } catch (error) {
+            console.error('Failed to stop recognition on quiz completion:', error);
+          }
+        }
+      }
+      
       return;
     }
 
     // Just pick the next question in the current order (no shuffle here)
     setCurrentIndex(remainingQuestions[0]);
+    
+    // Clear input value again after setting new question and focus input
+    setTimeout(() => {
+      setInputValue(''); // Clear input value again to ensure it's empty
+      inputRef.current?.focus();
+    }, 100);
   };
 
   // Modified handleSubmit for adaptive flow
@@ -366,6 +537,13 @@ useEffect(() => {
     setCanAdvance(false);
   }, [currentIndex, hasSubmitted]);
 
+  // Clear input value when question changes to prevent old values from showing
+  useEffect(() => {
+    if (currentIndex >= 0) {
+      setInputValue('');
+    }
+  }, [currentIndex]);
+
   // When feedback is shown, enable advancing
   useEffect(() => {
     if (hasSubmitted) {
@@ -477,14 +655,54 @@ useEffect(() => {
   return (
     <main className="min-h-screen flex flex-col items-center justify-start bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 text-gray-100 p-2 sm:p-4 max-w-md mx-auto overflow-hidden pt-4">
       <div className="w-full max-w-md flex flex-col items-center">
-        <Link href="/" className="text-purple-400 underline text-sm mb-4 inline-block hover:text-purple-200 transition-colors">
-          ← Back to Home
-        </Link>
+        <div className="flex items-center justify-between w-full mb-4">
+          <Link href="/" className="text-purple-400 underline text-sm hover:text-purple-200 transition-colors">
+            ← Back to Home
+          </Link>
+          
+          {/* Global Speech Toggle */}
+          {speechSupported && (
+            <button
+              onClick={toggleGlobalSpeech}
+              className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium transition-all duration-200 ${
+                globalSpeechEnabled
+                  ? 'bg-green-600 text-white shadow-lg'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+              title={globalSpeechEnabled ? 'Disable global speech recognition' : 'Enable global speech recognition'}
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+              </svg>
+              <span>{globalSpeechEnabled ? 'ON' : 'OFF'}</span>
+            </button>
+          )}
+        </div>
+        
+        {/* Global Speech Status - Fixed height to prevent bouncing */}
+        <div className="mb-4 text-center min-h-[32px] flex items-center justify-center">
+          {globalSpeechEnabled && isListening && (
+            <div className="inline-flex items-center gap-2 bg-green-900/50 border border-green-700 text-green-200 px-3 py-1 rounded-full text-sm">
+              <span className="animate-pulse">●</span>
+              Global Speech Recognition Active
+            </div>
+          )}
+        </div>
+
+        {/* Mobile Speech Help - Fixed height to prevent bouncing */}
+        <div className="mb-4 text-center min-h-[28px] flex items-center justify-center">
+          {speechSupported && isMobile && (
+            <div className="bg-blue-900/50 border border-blue-700 text-blue-200 px-3 py-1 rounded text-xs">
+              📱 Mobile: Tap the mic button to start voice input
+            </div>
+          )}
+        </div>
 
         {/* Breadcrumb */}
         <div className="mb-4 text-center">
           <span className="text-sm text-gray-400">
-            {String(subject).charAt(0).toUpperCase() + String(subject).slice(1)} → {String(lesson).charAt(0).toUpperCase() + String(lesson).slice(1)} → {String(topic).charAt(0).toUpperCase() + String(topic).slice(1)}
+            {String(subject).charAt(0).toUpperCase() + String(subject).slice(1)} → {String(lesson).charAt(0).toUpperCase() + String(lesson).slice(1)} → {String(decodeURIComponent(topic as string)).charAt(0).toUpperCase() + String(decodeURIComponent(topic as string)).slice(1)}
           </span>
         </div>
 
@@ -493,20 +711,24 @@ useEffect(() => {
           <span className="text-2xl font-extrabold text-pink-400 drop-shadow-sm">Questions Remaining: {remainingQuestions.length}</span>
         </div>
 
-        {/* BIG TIMER - intense, prominent, animated */}
+        {/* BIG TIMER - stable positioning to prevent bouncing */}
         <div className="flex justify-center mb-4">
           <div
-            className={`relative flex items-center justify-center w-24 h-24 rounded-full shadow-lg border-4 transition-colors duration-300
-          ${timeLeft !== null && timeLeft <= 5 ? 'border-red-600 bg-red-900 animate-pulse' : 'border-purple-700 bg-gray-900'}
-            `}
+            className={`relative flex items-center justify-center w-24 h-24 rounded-full shadow-lg border-4 transition-colors duration-300 ${
+              timeLeft !== null && timeLeft <= 5 
+                ? 'border-red-600 bg-red-900 animate-pulse' 
+                : 'border-purple-700 bg-gray-900'
+            }`}
           >
             <span
-          className={`text-3xl font-extrabold font-mono select-none drop-shadow-lg
-            ${timeLeft !== null && timeLeft <= 5 ? 'text-red-400 animate-pulse' : 'text-purple-200'}
-          `}
-          style={{ letterSpacing: '0.05em' }}
+              className={`text-3xl font-extrabold font-mono select-none drop-shadow-lg transition-colors duration-300 ${
+                timeLeft !== null && timeLeft <= 5 
+                  ? 'text-red-400' 
+                  : 'text-purple-200'
+              }`}
+              style={{ letterSpacing: '0.05em' }}
             >
-          {timeLeft !== null ? timeLeft : timerSeconds}
+              {timeLeft !== null ? timeLeft : timerSeconds}
             </span>
             <span className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs text-gray-400 tracking-wider">SECONDS</span>
           </div>
@@ -516,7 +738,13 @@ useEffect(() => {
           <h2 className="text-lg font-bold mb-2 text-purple-200 drop-shadow">Question {sessionQuestionNumber}</h2>
           <div className="flex justify-between items-center mb-2">
             <p className="text-xs text-gray-400">Question {sessionQuestionNumber} of {questions.length}</p>
-            <span className={`text-sm font-mono px-2 py-1 rounded ${timeLeft !== null && timeLeft <= 5 ? 'bg-red-700 text-white' : 'bg-gray-800 text-purple-200'}`}>⏰ {timeLeft !== null ? timeLeft : timerSeconds}s</span>
+            <span className={`text-sm font-mono px-2 py-1 rounded transition-colors duration-300 ${
+              timeLeft !== null && timeLeft <= 5 
+                ? 'bg-red-700 text-white' 
+                : 'bg-gray-800 text-purple-200'
+            }`}>
+              ⏰ {timeLeft !== null ? timeLeft : timerSeconds}s
+            </span>
           </div>
           <div className="mb-2 flex items-center gap-2">
             <p className="flex-1 text-gray-100 text-base">{questions[currentIndex].question}</p>
@@ -540,7 +768,7 @@ useEffect(() => {
           </div>
 
           {!hasSubmitted && (
-            <>
+            <div className="min-h-[120px]"> {/* Fixed height container to prevent bouncing */}
               <div className="flex flex-wrap gap-2 mb-2">
                 {userAnswers.map((ans, idx) => {
                   const isCorrect = isAnswerCorrect(ans);
@@ -595,6 +823,7 @@ useEffect(() => {
                   </button>
                 )}
               </div>
+              
               {/* Show Submit button if single answer or last answer for multi-answer */}
               {((totalExpected === 1) || (totalExpected > 1 && userAnswers.length === totalExpected - 1)) && (
                 <>
@@ -632,7 +861,7 @@ useEffect(() => {
                   )}
                 </>
               )}
-            </>
+            </div>
           )}
 
           {hasSubmitted && (
