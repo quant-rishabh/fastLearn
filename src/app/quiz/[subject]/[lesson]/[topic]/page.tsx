@@ -168,7 +168,7 @@ export default function QuizPage() {
       
       if (recognitionRef.current) {
         // Mobile-specific configurations
-        recognitionRef.current.continuous = false; // Set to false for better mobile support
+        recognitionRef.current.continuous = true; // Set to true for longer listening sessions
         recognitionRef.current.interimResults = !isMobile; // Enable interim results only on desktop
         recognitionRef.current.lang = 'en-US';
         recognitionRef.current.maxAlternatives = 1;
@@ -220,7 +220,7 @@ export default function QuizPage() {
           console.log('Speech recognition ended');
           setIsListening(false);
           
-          // Auto-restart if global speech is enabled - check localStorage and finishedRef for current values
+          // Restart if global speech is enabled and quiz isn't finished
           setTimeout(() => {
             const currentGlobalSpeech = localStorage.getItem('global_speech_enabled') === 'true';
             const currentFinished = finishedRef.current;
@@ -233,7 +233,7 @@ export default function QuizPage() {
                 console.log('Auto-restart failed:', error);
               }
             }
-          }, 100);
+          }, 100); // Increased timeout to 1 second to prevent rapid restart issues
         };
       }
     } else {
@@ -254,12 +254,12 @@ export default function QuizPage() {
     };
   }, []);
 
-  // Add effect to manage global speech recognition
+  // Add effect to manage global speech recognition - only for initial start/stop
   useEffect(() => {
     if (!speechSupported || !recognitionRef.current) return;
     
     if (globalSpeechEnabled && !finished && !isListening) {
-      // Start listening when global speech is enabled
+      // Only start if not already running
       try {
         recognitionRef.current.start();
         console.log('Started speech recognition via useEffect');
@@ -276,6 +276,23 @@ export default function QuizPage() {
       }
     }
   }, [globalSpeechEnabled, finished, speechSupported]);
+
+  // Function to handle navigation and cleanup speech recognition
+  const handleNavigateHome = () => {
+    // Stop and disable global speech when navigating away
+    if (globalSpeechEnabled) {
+      setGlobalSpeechEnabled(false);
+      localStorage.setItem('global_speech_enabled', 'false');
+      if (isListening && recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+          console.log('Stopped speech recognition on navigation');
+        } catch (error) {
+          console.error('Failed to stop recognition on navigation:', error);
+        }
+      }
+    }
+  };
 
   // Simple speech recognition toggle - no auto management
   const toggleGlobalSpeech = () => {
@@ -623,7 +640,11 @@ useEffect(() => {
     return (
       <main className="min-h-screen flex flex-col items-center justify-start bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 text-gray-100 p-2 sm:p-4 max-w-md mx-auto text-center overflow-hidden pt-4">
         <div className="w-full max-w-md flex flex-col items-center">
-          <Link href="/" className="text-purple-400 underline text-sm mb-4 inline-block hover:text-purple-200 transition-colors">
+          <Link 
+            href="/" 
+            className="text-purple-400 underline text-sm mb-4 inline-block hover:text-purple-200 transition-colors"
+            onClick={handleNavigateHome}
+          >
             ← Back to Home
           </Link>
           <h2 className="text-2xl font-bold mb-4 text-purple-300 drop-shadow">Quiz Finished 🎉</h2>
@@ -656,7 +677,11 @@ useEffect(() => {
     <main className="min-h-screen flex flex-col items-center justify-start bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 text-gray-100 p-2 sm:p-4 max-w-md mx-auto overflow-hidden pt-4">
       <div className="w-full max-w-md flex flex-col items-center">
         <div className="flex items-center justify-between w-full mb-4">
-          <Link href="/" className="text-purple-400 underline text-sm hover:text-purple-200 transition-colors">
+          <Link 
+            href="/" 
+            className="text-purple-400 underline text-sm hover:text-purple-200 transition-colors"
+            onClick={handleNavigateHome}
+          >
             ← Back to Home
           </Link>
           
