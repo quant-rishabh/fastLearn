@@ -174,6 +174,11 @@ export default function Home() {
               🎯 JAM Practice
             </button>
           </a>
+          <a href="https://gemini.google.com/app/eed54c4485daa4c0?hl=en-IN" target="_blank" rel="noopener noreferrer">
+            <button className="px-6 py-3 bg-green-600 text-white rounded-lg shadow hover:bg-green-700 transition-all font-semibold border border-green-500">
+              🔧 Generate Json
+            </button>
+          </a>
         </div>
 
         {/* Subject Dropdown */}
