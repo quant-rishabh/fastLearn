@@ -48,6 +48,7 @@ export default function SettingsPage() {
     localStorage.setItem('fuzzy_threshold', threshold.toString());
     localStorage.setItem('shuffle_enabled', shuffleEnabled.toString());
     localStorage.setItem('auto_speak', String(autoSpeak));
+    localStorage.setItem('fetch_from_db', String(fetchFromDb));
     localStorage.setItem('quiz_timer_seconds', timerSeconds.toString());
     localStorage.setItem('practice_count', practiceCount.toString());
     setToastMsg('✅ Settings saved!');
