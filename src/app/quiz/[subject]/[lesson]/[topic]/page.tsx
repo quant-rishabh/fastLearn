@@ -767,40 +767,23 @@ if (globalSpeechEnabled && speechSupported && recognitionRef.current) {
           <span className="text-2xl font-extrabold text-pink-400 drop-shadow-sm">Questions Remaining: {remainingQuestions.length}</span>
         </div>
 
-        {/* BIG TIMER - stable positioning to prevent bouncing */}
-        <div className="flex justify-center mb-4">
-          <div
-            className={`relative flex items-center justify-center w-24 h-24 rounded-full shadow-lg border-4 transition-colors duration-300 ${
-              timeLeft !== null && timeLeft <= 5 
-                ? 'border-red-600 bg-red-900 animate-pulse' 
-                : 'border-purple-700 bg-gray-900'
-            }`}
-          >
-            <span
-              className={`text-3xl font-extrabold font-mono select-none drop-shadow-lg transition-colors duration-300 ${
-                timeLeft !== null && timeLeft <= 5 
-                  ? 'text-red-400' 
-                  : 'text-purple-200'
-              }`}
-              style={{ letterSpacing: '0.05em' }}
-            >
-              {timeLeft !== null ? timeLeft : timerSeconds}
-            </span>
-            <span className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs text-gray-400 tracking-wider">SECONDS</span>
-          </div>
-        </div>
-
         <div className="bg-gray-950/80 border border-gray-800 rounded-xl shadow-lg p-4 mb-4 w-full flex flex-col">
           <h2 className="text-lg font-bold mb-2 text-purple-200 drop-shadow">Question {sessionQuestionNumber}</h2>
           <div className="flex justify-between items-center mb-2">
             <p className="text-xs text-gray-400">Question {sessionQuestionNumber} of {questions.length}</p>
-            <span className={`text-sm font-mono px-2 py-1 rounded transition-colors duration-300 ${
+            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-lg transition-all duration-300 transform ${
               timeLeft !== null && timeLeft <= 5 
-                ? 'bg-red-700 text-white' 
-                : 'bg-gray-800 text-purple-200'
+                ? 'bg-red-600 text-white shadow-lg shadow-red-500/50 animate-pulse scale-110 border-2 border-red-400' 
+                : 'bg-green-600 text-white shadow-lg shadow-green-500/30'
             }`}>
-              ⏰ {timeLeft !== null ? timeLeft : timerSeconds}s
-            </span>
+              <span className="text-xl">⏰</span>
+              <span className="font-mono text-xl tracking-wider">
+                {timeLeft !== null ? timeLeft : timerSeconds}s
+              </span>
+              {timeLeft !== null && timeLeft <= 5 && (
+                <span className="text-yellow-300 animate-bounce text-sm">HURRY!</span>
+              )}
+            </div>
           </div>
           <div className="mb-2 flex items-center gap-2">
             <p className="flex-1 text-gray-100 text-base">{questions[currentIndex].question}</p>
