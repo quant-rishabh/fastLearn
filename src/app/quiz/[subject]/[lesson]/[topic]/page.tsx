@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { isFuzzyMatchArray } from '@/utils/fuzzyMatch';
 import Link from 'next/link';
 import { useRef } from 'react';
+import { supabase } from '@/utils/supabase';
 
 // Type declarations for Speech Recognition API
 declare global {
@@ -40,6 +41,9 @@ export default function QuizPage() {
   
   // Track indices of questions not yet answered correctly
   const [remainingQuestions, setRemainingQuestions] = useState<number[]>([]);
+  
+  // Add state for subject label
+  const [subjectLabel, setSubjectLabel] = useState<string>('');
 
   // Mobile detection - calculate once to prevent repeated checks
   const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -57,6 +61,25 @@ export default function QuizPage() {
   useEffect(() => {
     finishedRef.current = finished;
   }, [finished]);
+
+  // Fetch subject label
+  useEffect(() => {
+    const fetchSubjectLabel = async () => {
+      if (!subject) return;
+      
+      const { data, error } = await supabase
+        .from('subjects')
+        .select('label')
+        .eq('slug', subject)
+        .single();
+      
+      if (data && !error) {
+        setSubjectLabel(data.label);
+      }
+    };
+    
+    fetchSubjectLabel();
+  }, [subject]);
 
   // On questions load, initialize remainingQuestions with all indices, shuffled (no repetition at start)
   useEffect(() => {
@@ -719,30 +742,11 @@ useEffect(() => {
             </button>
           )}
         </div>
-        
-        {/* Global Speech Status - Fixed height to prevent bouncing */}
-        <div className="mb-4 text-center min-h-[32px] flex items-center justify-center">
-          {globalSpeechEnabled && isListening && (
-            <div className="inline-flex items-center gap-2 bg-green-900/50 border border-green-700 text-green-200 px-3 py-1 rounded-full text-sm">
-              <span className="animate-pulse">●</span>
-              Global Speech Recognition Active
-            </div>
-          )}
-        </div>
-
-        {/* Mobile Speech Help - Fixed height to prevent bouncing */}
-        <div className="mb-4 text-center min-h-[28px] flex items-center justify-center">
-          {speechSupported && isMobile && (
-            <div className="bg-blue-900/50 border border-blue-700 text-blue-200 px-3 py-1 rounded text-xs">
-              📱 Mobile: Tap the mic button to start voice input
-            </div>
-          )}
-        </div>
 
         {/* Breadcrumb */}
         <div className="mb-4 text-center">
           <span className="text-sm text-gray-400">
-            {String(subject).charAt(0).toUpperCase() + String(subject).slice(1)} → {String(lesson).charAt(0).toUpperCase() + String(lesson).slice(1)} → {String(decodeURIComponent(topic as string)).charAt(0).toUpperCase() + String(decodeURIComponent(topic as string)).slice(1)}
+            {subjectLabel || String(subject).charAt(0).toUpperCase() + String(subject).slice(1)} → {decodeURIComponent(String(lesson))} → {decodeURIComponent(String(topic))}
           </span>
         </div>
 
