@@ -442,22 +442,41 @@ const handleImageInput = async (
                   <button
                     className="bg-red-700 hover:bg-red-800 text-white px-3 py-1 rounded text-xs font-bold shadow transition-all"
                     onClick={async () => {
-                      if (!window.confirm(`Are you sure you want to delete subject '${s.label}'? This will remove all related topics and questions!`)) return;
-                      // 1. Get all topics for this subject
-                      const { data: topics, error: topicsError } = await supabase.from('topics').select('id').eq('subject_id', s.id);
-                      if (topicsError) {
-                        showMessage('❌ Failed to fetch topics');
+                      if (!window.confirm(`Are you sure you want to delete subject '${s.label}'? This will remove all related lessons, topics and questions!`)) return;
+                      
+                      // 1. Get all lessons for this subject
+                      const { data: lessons, error: lessonsError } = await supabase
+                        .from('lessons')
+                        .select('id')
+                        .eq('subject_id', s.id);
+                      
+                      if (lessonsError) {
+                        showMessage('❌ Failed to fetch lessons');
                         return;
                       }
-                      // 2. Delete all questions for each topic
-                      if (topics && topics.length > 0) {
-                        for (const topic of topics) {
-                          await supabase.from('questions').delete().eq('topic_id', topic.id);
+
+                      // 2. Get all topics for these lessons and delete questions
+                      if (lessons && lessons.length > 0) {
+                        for (const lesson of lessons) {
+                          const { data: topics, error: topicsError } = await supabase
+                            .from('topics')
+                            .select('id')
+                            .eq('lesson_id', lesson.id);
+                          
+                          if (!topicsError && topics && topics.length > 0) {
+                            // Delete all questions for each topic
+                            for (const topic of topics) {
+                              await supabase.from('questions').delete().eq('topic_id', topic.id);
+                            }
+                            // Delete all topics for this lesson
+                            await supabase.from('topics').delete().eq('lesson_id', lesson.id);
+                          }
                         }
-                        // 3. Delete all topics for this subject
-                        await supabase.from('topics').delete().eq('subject_id', s.id);
+                        // Delete all lessons for this subject
+                        await supabase.from('lessons').delete().eq('subject_id', s.id);
                       }
-                      // 4. Delete the subject itself
+
+                      // 3. Delete the subject itself
                       const { error } = await supabase.from('subjects').delete().eq('id', s.id);
                       if (!error) {
                         showMessage('🗑️ Subject deleted');
