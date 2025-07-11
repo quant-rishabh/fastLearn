@@ -226,6 +226,7 @@ export default function QuizPage() {
         };
 
         recognitionRef.current.onerror = (event: any) => {
+            if (event.error === 'aborted' || event.error === 'abort') return;
           console.error('Speech recognition error:', event.error);
           setIsListening(false);
           
@@ -245,18 +246,18 @@ export default function QuizPage() {
           
           // Restart if global speech is enabled and quiz isn't finished
           setTimeout(() => {
-            const currentGlobalSpeech = localStorage.getItem('global_speech_enabled') === 'true';
-            const currentFinished = finishedRef.current;
-            
-            if (currentGlobalSpeech && !currentFinished && recognitionRef.current) {
-              try {
-                recognitionRef.current.start();
-                console.log('Auto-restarted speech recognition');
-              } catch (error) {
-                console.log('Auto-restart failed:', error);
-              }
-            }
-          }, 100); // Increased timeout to 1 second to prevent rapid restart issues
+    const currentGlobalSpeech = localStorage.getItem('global_speech_enabled') === 'true';
+    const currentFinished = finishedRef.current;
+
+    // 🛡️ Same guard here
+    if (currentGlobalSpeech && !currentFinished && recognitionRef.current && !isListening) {
+      try {
+        recognitionRef.current.start();
+      } catch (err) {
+        console.warn('Ignored duplicate start():', err);
+      }
+    }
+  }, 100); // Increased timeout to 1 second to prevent rapid restart issues
         };
       }
     } else {
@@ -466,16 +467,18 @@ useEffect(() => {
 
     // --- Speech recognition: restart after question is set ---
     setTimeout(() => {
-      setInputValue(''); // Clear input value again to ensure it's empty
-      inputRef.current?.focus();
-      if (globalSpeechEnabled && speechSupported && recognitionRef.current) {
-        try {
-          recognitionRef.current.start();
-        } catch (error) {
-          console.error('Failed to start recognition after next question:', error);
-        }
-      }
-    }, 100);
+  setInputValue('');
+  inputRef.current?.focus();
+
+  // 🛡️ START only if we’re not already listening
+  if (globalSpeechEnabled && speechSupported && recognitionRef.current && !isListening) {
+    try {
+      recognitionRef.current.start();
+    } catch (err) {
+      console.warn('Ignored duplicate start():', err);
+    }
+  }
+}, 100);
   };
 
   // Modified handleSubmit for adaptive flow
@@ -496,6 +499,15 @@ useEffect(() => {
     const isMatch = isFuzzyMatchArray(answersToCheck, expectedAnswers, savedThreshold);
     setIsCorrect(isMatch);
     setHasSubmitted(true);
+    // ── flush the speech-recognition buffer ──────────────────────────
+if (globalSpeechEnabled && speechSupported && recognitionRef.current) {
+  try {
+    recognitionRef.current.abort();   // abort() clears queued transcripts
+    setIsListening(false);            // keep local flag in sync
+  } catch (err) {
+    console.error('Failed to abort recognition:', err);
+  }
+}
     if (isMatch) {
       setScore((prev) => prev + 1);
       // Remove only one instance of this question from remainingQuestions
