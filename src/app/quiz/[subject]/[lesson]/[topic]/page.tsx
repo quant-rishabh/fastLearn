@@ -705,9 +705,12 @@ if (globalSpeechEnabled && speechSupported && recognitionRef.current) {
               <h3 className="text-lg font-semibold mb-2 text-red-300">❌ Questions You Got Wrong:</h3>
               {wrongAnswers.map((item, idx) => (
                 <div key={idx} className="mb-4 p-3 bg-red-900/70 border border-red-700 text-red-100 rounded shadow">
-                  <p><strong>Q:</strong> {item.question}</p>
-                  <p><strong>Your Answer:</strong> <span className="text-yellow-200">{item.user}</span></p>
-                  <p><strong>Correct Answer:</strong> <span className="text-green-300">{item.correct}</span></p>
+                  <p className="mb-2"><strong>Q:</strong> {item.question}</p>
+                  <p className="mb-2"><strong>Your Answer:</strong> <span className="text-yellow-200">{item.user}</span></p>
+                  <div className="mb-2 p-3 bg-green-900/50 border border-green-600 rounded-lg">
+                    <p className="text-lg font-bold text-green-300 mb-1">✅ Correct Answer:</p>
+                    <p className="text-xl font-semibold text-green-200 tracking-wide">{item.correct}</p>
+                  </div>
                   {item.note && (
                     <div>
                       <div><strong>Note:</strong></div>
@@ -805,6 +808,19 @@ if (globalSpeechEnabled && speechSupported && recognitionRef.current) {
               </span>
             )}
           </div>
+
+          {/* Move Next button here for mobile ease */}
+          {hasSubmitted && (
+            <button
+              onClick={() => {
+                setTimerActive(false); // Stop timer on next
+                handleNext();
+              }}
+              className="mb-4 w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all"
+            >
+              {remainingQuestions.length === 0 ? 'Finish Quiz' : 'Next'}
+            </button>
+          )}
 
           {!hasSubmitted && (
             <div className="min-h-[120px]"> {/* Fixed height container to prevent bouncing */}
@@ -907,11 +923,11 @@ if (globalSpeechEnabled && speechSupported && recognitionRef.current) {
             <>
               <div className={`mt-4 p-3 rounded text-sm ${isCorrect ? 'bg-green-900/70 border border-green-700 text-green-200' : 'bg-red-900/70 border border-red-700 text-red-200'} shadow`}>
                 {isCorrect ? '✅ Correct!' : '❌ Incorrect.'}
-                <div className="mt-2 bg-gray-900 border border-gray-700 rounded p-2 flex items-center gap-2 text-purple-100">
-                  <strong>Correct Answer:</strong> <span className="text-green-300">{questions[currentIndex].answer}</span>
+                <div className="mt-2 p-3 bg-green-900/50 border border-green-600 rounded-lg">
+                  <p className="text-xl font-semibold text-green-200 tracking-wide">{questions[currentIndex].answer}</p>
                   <button
                     onClick={() => playGoogleTTS(questions[currentIndex].answer)}
-                    className="ml-2 text-purple-400 hover:text-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 rounded p-1"
+                    className="mt-2 text-purple-400 hover:text-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 rounded p-1"
                     title="Listen to answer"
                   >
                     🔊
@@ -949,16 +965,6 @@ if (globalSpeechEnabled && speechSupported && recognitionRef.current) {
                   />
                 </div>
               )}
-
-              <button
-                onClick={() => {
-                  setTimerActive(false); // Stop timer on next
-                  handleNext();
-                }}
-                className="mt-4 w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all"
-              >
-                {remainingQuestions.length === 0 ? 'Finish Quiz' : 'Next'}
-              </button>
             </>
           )}
         </div>
