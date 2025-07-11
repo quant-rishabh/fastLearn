@@ -82,16 +82,18 @@ export default function QuizPage() {
   }, [subject]);
 
   // On questions load, initialize remainingQuestions with all indices, shuffled (no repetition at start)
-  useEffect(() => {
-    if (questions.length > 0) {
-      const indices = Array.from({ length: questions.length }, (_, i) => i);
-      const shuffled = shuffleArray(indices);
-      setRemainingQuestions(shuffled);
-      setCurrentIndex(shuffled[0]); // Set to first in shuffled, not 0
-      setSessionQuestionNumber(1); // Reset session question number
-      setFinished(false);
-    }
-  }, [questions.length]);
+useEffect(() => {
+  if (questions.length > 0) {
+    const indices = Array.from({ length: questions.length }, (_, i) => i);
+    const shuffleEnabled = localStorage.getItem('shuffle_enabled') === 'true';
+    const initialOrder = shuffleEnabled ? shuffleArray(indices) : indices;
+    setRemainingQuestions(initialOrder);
+    setCurrentIndex(initialOrder[0]);
+    setSessionQuestionNumber(1); // Reset session question number
+    setFinished(false);
+  }
+}, [questions.length]);
+
 
   // Helper to shuffle an array
   function shuffleArray<T>(array: T[]): T[] {
@@ -531,10 +533,12 @@ if (globalSpeechEnabled && speechSupported && recognitionRef.current) {
       // Add this question index back to remainingQuestions practice_count times
       const practiceCount = Number(localStorage.getItem('practice_count') || '2');
       setRemainingQuestions((prev) => {
-        const toAdd = Array(practiceCount).fill(currentIndex);
-        const next = [...prev, ...toAdd];
-        return shuffleArray(next);
-      });
+  const toAdd = Array(practiceCount).fill(currentIndex);
+  const shuffleEnabled = localStorage.getItem('shuffle_enabled') === 'true';
+  const next = [...prev, ...toAdd];
+  return shuffleEnabled ? shuffleArray(next) : next;
+});
+
     }
   };
 
