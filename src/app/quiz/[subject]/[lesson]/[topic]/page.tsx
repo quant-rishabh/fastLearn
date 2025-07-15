@@ -27,6 +27,7 @@ interface Question {
 
 export default function QuizPage() {
   const { subject, lesson, topic } = useParams();
+  const [speechTranscript, setSpeechTranscript] = useState('');
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(-1); // Initialize to -1 to prevent premature TTS
   const [userAnswers, setUserAnswers] = useState<string[]>([]); // New: array of answers
@@ -204,28 +205,30 @@ useEffect(() => {
         };
 
         recognitionRef.current.onresult = (event: any) => {
-          let finalTranscript = '';
-          let interimTranscript = '';
-          
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript;
-            } else {
-              interimTranscript += event.results[i][0].transcript;
-            }
-          }
-          
-          // Only update input for final transcript to prevent bouncing
-          if (finalTranscript) {
-            setInputValue(finalTranscript.trim());
-          } else if (interimTranscript && !isMobile) {
-            // Only show interim results on desktop and throttle updates
-            const trimmedInterim = interimTranscript.trim();
-            if (trimmedInterim.length > 2) { // Only update if meaningful text
-              setInputValue(trimmedInterim);
-            }
-          }
-        };
+  let interimTranscript = '';
+  let finalTranscript = speechTranscript; // Start from buffer
+
+  for (let i = event.resultIndex; i < event.results.length; i++) {
+    if (event.results[i].isFinal) {
+      finalTranscript += event.results[i][0].transcript;
+    } else {
+      interimTranscript += event.results[i][0].transcript;
+    }
+  }
+
+  // Save final recognized text to buffer
+  if (finalTranscript !== speechTranscript) {
+    setSpeechTranscript(finalTranscript);
+    setInputValue(finalTranscript.trim());
+  } else if (interimTranscript && !isMobile) {
+    // Show interim text (not saved) only on desktop
+    const trimmedInterim = (speechTranscript + interimTranscript).trim();
+    if (trimmedInterim.length > 2) {
+      setInputValue(trimmedInterim);
+    }
+  }
+};
+
 
         recognitionRef.current.onerror = (event: any) => {
             if (event.error === 'aborted' || event.error === 'abort') return;
@@ -612,6 +615,7 @@ if (globalSpeechEnabled && speechSupported && recognitionRef.current) {
   useEffect(() => {
     if (currentIndex >= 0) {
       setInputValue('');
+      setSpeechTranscript(''); // <--- Add this line
     }
   }, [currentIndex]);
 
