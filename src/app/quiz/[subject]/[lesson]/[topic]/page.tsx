@@ -204,30 +204,34 @@ useEffect(() => {
           setIsListening(true);
         };
 
-        recognitionRef.current.onresult = (event: any) => {
-  let interimTranscript = '';
-  let finalTranscript = speechTranscript; // Start from buffer
+// ───── Speech‑to‑text: build full transcript every time ──────────
+recognitionRef.current.onresult = (event: any) => {
+  // 1️⃣ Gather everything we already have as FINAL
+  let finalSoFar = '';
+  // 2️⃣ Gather anything that is still INTERIM for this tick
+  let interimNow = '';
 
-  for (let i = event.resultIndex; i < event.results.length; i++) {
+  // Loop through *all* results Chrome keeps for this session
+  for (let i = 0; i < event.results.length; i++) {
+    const chunk = event.results[i][0].transcript.trim();
+    if (!chunk) continue;
+
     if (event.results[i].isFinal) {
-      finalTranscript += event.results[i][0].transcript;
+      finalSoFar += (finalSoFar ? ' ' : '') + chunk;
     } else {
-      interimTranscript += event.results[i][0].transcript;
+      interimNow += (interimNow ? ' ' : '') + chunk;
     }
   }
 
-  // Save final recognized text to buffer
-  if (finalTranscript !== speechTranscript) {
-    setSpeechTranscript(finalTranscript);
-    setInputValue(finalTranscript.trim());
-  } else if (interimTranscript && !isMobile) {
-    // Show interim text (not saved) only on desktop
-    const trimmedInterim = (speechTranscript + interimTranscript).trim();
-    if (trimmedInterim.length > 2) {
-      setInputValue(trimmedInterim);
-    }
-  }
+  // 3️⃣ Persist the confirmed part
+  setSpeechTranscript(finalSoFar);
+
+  // 4️⃣ Show confirmed + live interim in the input field
+  setInputValue(
+    interimNow ? `${finalSoFar} ${interimNow}`.trim() : finalSoFar
+  );
 };
+
 
 
         recognitionRef.current.onerror = (event: any) => {
@@ -349,6 +353,22 @@ useEffect(() => {
 }, [currentIndex, questions]);
 
 
+  // Add this function to clear both input and speech buffer
+  const clearInputAndSpeech = () => {
+  setInputValue('');
+  setSpeechTranscript('');
+  
+  // Also abort current recognition to prevent queued results
+  if (globalSpeechEnabled && speechSupported && recognitionRef.current) {
+    try {
+      recognitionRef.current.abort();
+      setIsListening(false);
+    } catch (err) {
+      console.error('Failed to abort recognition:', err);
+    }
+  }
+};
+
   const handleAddAnswer = () => {
     const trimmed = inputValue.trim();
     if (trimmed && !userAnswers.includes(trimmed.toLowerCase())) {
@@ -432,118 +452,106 @@ useEffect(() => {
 
   // Modified handleNext for adaptive flow
   const handleNext = () => {
-    setTimerActive(false); // Stop timer on next
-    setUserAnswers([]);
-    setInputValue(''); // Clear input value
-    setHasSubmitted(false);
-    setIsCorrect(null);
-    setSessionQuestionNumber((prev) => prev + 1); // Increment session question number
+  setTimerActive(false);
+  setUserAnswers([]);
+  setHasSubmitted(false);
+  setIsCorrect(null);
+  setSessionQuestionNumber((prev) => prev + 1);
 
-    // --- Speech recognition: stop before changing question ---
-    if (globalSpeechEnabled && speechSupported && recognitionRef.current && isListening) {
-      try {
-        recognitionRef.current.stop();
-      } catch (error) {
-        console.error('Failed to stop recognition before next question:', error);
-      }
-    }
-    // If no more questions, finish
-    if (remainingQuestions.length === 0) {
-      setFinished(true);
-      
-      // Stop and disable global speech when quiz is finished
-      if (globalSpeechEnabled) {
-        setGlobalSpeechEnabled(false);
-        localStorage.setItem('global_speech_enabled', 'false');
-        if (isListening) {
-          try {
-            recognitionRef.current.stop();
-          } catch (error) {
-            console.error('Failed to stop recognition on quiz completion:', error);
-          }
-        }
-      }
-      
-      return;
-    }
+  // Clear both input and speech buffer
+  clearInputAndSpeech();
 
-    // Just pick the next question in the current order (no shuffle here)
-    setCurrentIndex(remainingQuestions[0]);
-
-    // --- Speech recognition: restart after question is set ---
-    setTimeout(() => {
-  setInputValue('');
-  inputRef.current?.focus();
-
-  // 🛡️ START only if we’re not already listening
-  if (globalSpeechEnabled && speechSupported && recognitionRef.current && !isListening) {
+  // Stop speech recognition before changing question
+  if (globalSpeechEnabled && speechSupported && recognitionRef.current && isListening) {
     try {
-      recognitionRef.current.start();
-    } catch (err) {
-      console.warn('Ignored duplicate start():', err);
+      recognitionRef.current.stop();
+    } catch (error) {
+      console.error('Failed to stop recognition before next question:', error);
     }
   }
-}, 100);
-  };
+
+  if (remainingQuestions.length === 0) {
+    setFinished(true);
+    if (globalSpeechEnabled) {
+      setGlobalSpeechEnabled(false);
+      localStorage.setItem('global_speech_enabled', 'false');
+      if (isListening) {
+        try {
+          recognitionRef.current.stop();
+        } catch (error) {
+          console.error('Failed to stop recognition on quiz completion:', error);
+        }
+      }
+    }
+    return;
+  }
+
+  setCurrentIndex(remainingQuestions[0]);
+
+  setTimeout(() => {
+    inputRef.current?.focus();
+    if (globalSpeechEnabled && speechSupported && recognitionRef.current && !isListening) {
+      try {
+        recognitionRef.current.start();
+      } catch (err) {
+        console.warn('Ignored duplicate start():', err);
+      }
+    }
+  }, 100);
+};
 
   // Modified handleSubmit for adaptive flow
   const handleSubmit = (overrideAnswers?: string[]) => {
-    setTimerActive(false); // Stop timer on submit
-    const correctAnswer = questions[currentIndex]?.answer;
-    const expectedAnswers = correctAnswer
-      .split('@')
-      .map((a) => a.trim().toLowerCase())
-      .filter(Boolean);
-    const totalExpected = expectedAnswers.length;
-    const answersToCheck = overrideAnswers || userAnswers;
-    if (answersToCheck.length === 0) {
-      alert("⚠️ Please enter at least one answer.");
-      return;
-    }
-    const savedThreshold = Number(localStorage.getItem('fuzzy_threshold') || '0.4');
-    const isMatch = isFuzzyMatchArray(answersToCheck, expectedAnswers, savedThreshold);
-    setIsCorrect(isMatch);
-    setHasSubmitted(true);
-    // ── flush the speech-recognition buffer ──────────────────────────
-if (globalSpeechEnabled && speechSupported && recognitionRef.current) {
-  try {
-    recognitionRef.current.abort();   // abort() clears queued transcripts
-    setIsListening(false);            // keep local flag in sync
-  } catch (err) {
-    console.error('Failed to abort recognition:', err);
+  setTimerActive(false);
+  const correctAnswer = questions[currentIndex]?.answer;
+  const expectedAnswers = correctAnswer
+    .split('@')
+    .map((a) => a.trim().toLowerCase())
+    .filter(Boolean);
+  const totalExpected = expectedAnswers.length;
+  const answersToCheck = overrideAnswers || userAnswers;
+  
+  if (answersToCheck.length === 0) {
+    alert("⚠️ Please enter at least one answer.");
+    return;
   }
-}
-    if (isMatch) {
-      setScore((prev) => prev + 1);
-      // Remove only one instance of this question from remainingQuestions
-      setRemainingQuestions((prev) => {
-        const idx = prev.indexOf(currentIndex);
-        if (idx === -1) return prev;
-        const next = [...prev];
-        next.splice(idx, 1);
-        return next;
-      });
-    } else {
-      setWrongAnswers((prev) => [
-        ...prev,
-        {
-          question: questions[currentIndex].question,
-          correct: questions[currentIndex].answer,
-          user: answersToCheck.join(', '),
-          note: questions[currentIndex].note || '',
-        },
-      ]);
-      // Add this question index back to remainingQuestions practice_count times
-      const practiceCount = Number(localStorage.getItem('practice_count') || '2');
-      setRemainingQuestions((prev) => {
-  const toAdd = Array(practiceCount).fill(currentIndex);
-  const shuffleEnabled = localStorage.getItem('shuffle_enabled') === 'true';
-  const next = [...prev, ...toAdd];
-  return shuffleEnabled ? shuffleArray(next) : next;
-});
-
-    }
-  };
+  
+  const savedThreshold = Number(localStorage.getItem('fuzzy_threshold') || '0.4');
+  const isMatch = isFuzzyMatchArray(answersToCheck, expectedAnswers, savedThreshold);
+  setIsCorrect(isMatch);
+  setHasSubmitted(true);
+  
+  // Clear input and speech buffer after submit
+  clearInputAndSpeech();
+  
+  if (isMatch) {
+    setScore((prev) => prev + 1);
+    setRemainingQuestions((prev) => {
+      const idx = prev.indexOf(currentIndex);
+      if (idx === -1) return prev;
+      const next = [...prev];
+      next.splice(idx, 1);
+      return next;
+    });
+  } else {
+    setWrongAnswers((prev) => [
+      ...prev,
+      {
+        question: questions[currentIndex].question,
+        correct: questions[currentIndex].answer,
+        user: answersToCheck.join(', '),
+        note: questions[currentIndex].note || '',
+      },
+    ]);
+    const practiceCount = Number(localStorage.getItem('practice_count') || '2');
+    setRemainingQuestions((prev) => {
+      const toAdd = Array(practiceCount).fill(currentIndex);
+      const shuffleEnabled = localStorage.getItem('shuffle_enabled') === 'true';
+      const next = [...prev, ...toAdd];
+      return shuffleEnabled ? shuffleArray(next) : next;
+    });
+  }
+};
 
   // Add this function to play audio from Google TTS
   async function playGoogleTTS(text: string, lang = 'en-GB') {
@@ -613,11 +621,10 @@ if (globalSpeechEnabled && speechSupported && recognitionRef.current) {
 
   // Clear input value when question changes to prevent old values from showing
   useEffect(() => {
-    if (currentIndex >= 0) {
-      setInputValue('');
-      setSpeechTranscript(''); // <--- Add this line
-    }
-  }, [currentIndex]);
+  if (currentIndex >= 0) {
+    clearInputAndSpeech(); // Use the new clear function
+  }
+}, [currentIndex]);
 
   // When feedback is shown, enable advancing
   useEffect(() => {
