@@ -57,7 +57,7 @@ export default function QuizPage() {
   const recognitionRef = useRef<any>(null);
   const finishedRef = useRef<boolean>(false);
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Keep finishedRef in sync with finished state
   useEffect(() => {
@@ -423,12 +423,12 @@ const clearInputAndSpeech = () => {
     );
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
   setInputValue(e.target.value);
   transcriptRef.current = e.target.value;        // <-- NEW
 };
 
-  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && inputValue.trim()) {
       e.preventDefault();
       
@@ -876,12 +876,14 @@ const clearInputAndSpeech = () => {
                   );
                 })}
               </div>
-              <div className="flex gap-2 mb-4">
-                <input
+              <div className="flex flex-col gap-2 mb-4">
+                <textarea
                   ref={inputRef}
-                  type="text"
                   value={inputValue}
-                  onChange={handleInputChange}
+                  onChange={(e) => {
+                    setInputValue(e.target.value);
+                    transcriptRef.current = e.target.value;
+                  }}
                   onKeyDown={(e) => {
                     if (totalExpected === 1 && e.key === 'Enter' && inputValue.trim()) {
                       e.preventDefault();
@@ -892,14 +894,15 @@ const clearInputAndSpeech = () => {
                     }
                   }}
                   placeholder={`Type answer${totalExpected > 1 ? ' and press Enter/Add' : ''}`}
-                  className="flex-1 p-3 border border-gray-700 rounded-lg bg-gray-900 text-gray-100 focus:ring-2 focus:ring-purple-500 shadow"
+                  className="w-full p-3 border border-gray-700 rounded-lg bg-gray-900 text-gray-100 focus:ring-2 focus:ring-purple-500 shadow resize-none min-h-[80px] text-base leading-relaxed"
+                  rows={3}
                 />
                 {/* Show Add button only if multiple answers and not last answer */}
                 {totalExpected > 1 && userAnswers.length < totalExpected - 1 && (
                   <button
                     type="button"
                     onClick={handleAddAnswer}
-                    className="bg-purple-700 hover:bg-purple-800 text-white px-4 py-2 rounded-lg font-bold shadow"
+                    className="self-start bg-purple-700 hover:bg-purple-800 text-white px-4 py-2 rounded-lg font-bold shadow"
                   >
                     Add
                   </button>
