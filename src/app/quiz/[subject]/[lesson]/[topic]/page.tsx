@@ -361,11 +361,11 @@ useEffect(() => {
 
 
   // Add this function to clear both input and speech buffer
-  const clearInputAndSpeech = () => {
+// ⬇️ add the highlighted line
+const clearInputAndSpeech = () => {
   setInputValue('');
   setSpeechTranscript('');
-  
-  // Also abort current recognition to prevent queued results
+  transcriptRef.current = '';          // 🔑 reset running transcript
   if (globalSpeechEnabled && speechSupported && recognitionRef.current) {
     try {
       recognitionRef.current.abort();
