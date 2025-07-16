@@ -38,8 +38,15 @@ export default function QuizPage() {
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const transcriptRef = useRef('');   // final‑confirmed words only
   const [wrongAnswers, setWrongAnswers] = useState<
-  { question: string; correct: string; user: string; note?: string }[]
->([]);
+    {
+      question: string;
+      correct: string;
+      user: string;
+      note?: string;
+      normalizedCorrect?: string;
+      normalizedUser?: string;
+    }[]
+  >([]);
   
   // Track indices of questions not yet answered correctly
   const [remainingQuestions, setRemainingQuestions] = useState<number[]>([]);
@@ -410,16 +417,22 @@ const clearInputAndSpeech = () => {
     }
   };
 
-  // Function to check if an individual answer is correct
+
+  // Helper to remove punctuation for matching
+  function normalizeText(text: string) {
+    return text.replace(/[.,\/#!$%\^&*;:{}=\-_`~()?"'’]/g, '').replace(/\s{2,}/g, ' ').trim().toLowerCase();
+  }
+
+  // Function to check if an individual answer is correct (ignoring punctuation)
   const isAnswerCorrect = (answer: string) => {
     const correctAnswer = questions[currentIndex]?.answer || '';
     const expectedAnswers = correctAnswer
       .split('@')
-      .map((a) => a.trim().toLowerCase())
+      .map((a) => normalizeText(a))
       .filter(Boolean);
     const savedThreshold = Number(localStorage.getItem('fuzzy_threshold') || '0.4');
     return expectedAnswers.some(expected => 
-      isFuzzyMatchArray([answer], [expected], savedThreshold)
+      isFuzzyMatchArray([normalizeText(answer)], [expected], savedThreshold)
     );
   };
 
@@ -512,58 +525,67 @@ const clearInputAndSpeech = () => {
   }, 100);
 };
 
-  // Modified handleSubmit for adaptive flow
+
+  // Modified handleSubmit for adaptive flow (ignoring punctuation)
   const handleSubmit = (overrideAnswers?: string[]) => {
-  setTimerActive(false);
-  const correctAnswer = questions[currentIndex]?.answer;
-  const expectedAnswers = correctAnswer
-    .split('@')
-    .map((a) => a.trim().toLowerCase())
-    .filter(Boolean);
-  const totalExpected = expectedAnswers.length;
-  const answersToCheck = overrideAnswers || userAnswers;
-  
-  if (answersToCheck.length === 0) {
-    alert("⚠️ Please enter at least one answer.");
-    return;
-  }
-  
-  const savedThreshold = Number(localStorage.getItem('fuzzy_threshold') || '0.4');
-  const isMatch = isFuzzyMatchArray(answersToCheck, expectedAnswers, savedThreshold);
-  setIsCorrect(isMatch);
-  setHasSubmitted(true);
-  
-  // Clear input and speech buffer after submit
-  clearInputAndSpeech();
-  
-  if (isMatch) {
-    setScore((prev) => prev + 1);
-    setRemainingQuestions((prev) => {
-      const idx = prev.indexOf(currentIndex);
-      if (idx === -1) return prev;
-      const next = [...prev];
-      next.splice(idx, 1);
-      return next;
-    });
-  } else {
-    setWrongAnswers((prev) => [
-      ...prev,
-      {
-        question: questions[currentIndex].question,
-        correct: questions[currentIndex].answer,
-        user: answersToCheck.join(', '),
-        note: questions[currentIndex].note || '',
-      },
-    ]);
-    const practiceCount = Number(localStorage.getItem('practice_count') || '2');
-    setRemainingQuestions((prev) => {
-      const toAdd = Array(practiceCount).fill(currentIndex);
-      const shuffleEnabled = localStorage.getItem('shuffle_enabled') === 'true';
-      const next = [...prev, ...toAdd];
-      return shuffleEnabled ? shuffleArray(next) : next;
-    });
-  }
-};
+    setTimerActive(false);
+    const correctAnswer = questions[currentIndex]?.answer;
+    const expectedAnswers = correctAnswer
+      .split('@')
+      .map((a) => normalizeText(a))
+      .filter(Boolean);
+    const totalExpected = expectedAnswers.length;
+    const answersToCheck = (overrideAnswers || userAnswers).map(a => normalizeText(a));
+
+    if (answersToCheck.length === 0) {
+      alert("⚠️ Please enter at least one answer.");
+      return;
+    }
+
+    const savedThreshold = Number(localStorage.getItem('fuzzy_threshold') || '0.4');
+    const isMatch = isFuzzyMatchArray(answersToCheck, expectedAnswers, savedThreshold);
+    setIsCorrect(isMatch);
+    setHasSubmitted(true);
+
+    // Clear input and speech buffer after submit
+    clearInputAndSpeech();
+
+    if (isMatch) {
+      setScore((prev) => prev + 1);
+      setRemainingQuestions((prev) => {
+        const idx = prev.indexOf(currentIndex);
+        if (idx === -1) return prev;
+        const next = [...prev];
+        next.splice(idx, 1);
+        return next;
+      });
+    } else {
+      // Show both original and normalized answers in feedback
+      setWrongAnswers((prev) => [
+        ...prev,
+        {
+          question: questions[currentIndex].question,
+          correct: questions[currentIndex].answer,
+          user: (overrideAnswers || userAnswers).join(', '),
+          note: questions[currentIndex].note || '',
+          normalizedCorrect: correctAnswer
+            .split('@')
+            .map((a) => normalizeText(a))
+            .join(' | '),
+          normalizedUser: (overrideAnswers || userAnswers)
+            .map(a => normalizeText(a))
+            .join(' | '),
+        },
+      ]);
+      const practiceCount = Number(localStorage.getItem('practice_count') || '2');
+      setRemainingQuestions((prev) => {
+        const toAdd = Array(practiceCount).fill(currentIndex);
+        const shuffleEnabled = localStorage.getItem('shuffle_enabled') === 'true';
+        const next = [...prev, ...toAdd];
+        return shuffleEnabled ? shuffleArray(next) : next;
+      });
+    }
+  };
 
   // Add this function to play audio from Google TTS
   async function playGoogleTTS(text: string, lang = 'en-GB') {
@@ -737,7 +759,15 @@ const clearInputAndSpeech = () => {
                   <div className="mb-2 p-3 bg-green-900/50 border border-green-600 rounded-lg">
                     <p className="text-lg font-bold text-green-300 mb-1">✅ Correct Answer:</p>
                     <p className="text-xl font-semibold text-green-200 tracking-wide">{item.correct}</p>
+                    {item.normalizedCorrect && (
+                      <p className="text-xs text-green-300 mt-2">Normalized: <span className="font-mono">{item.normalizedCorrect}</span></p>
+                    )}
                   </div>
+                  {item.normalizedUser && (
+                    <div className="mb-2 p-2 bg-gray-800 border border-yellow-700 rounded-lg">
+                      <p className="text-xs text-yellow-200">Your Normalized Answer: <span className="font-mono">{item.normalizedUser}</span></p>
+                    </div>
+                  )}
                   {item.note && (
                     <div>
                       <div><strong>Note:</strong></div>
