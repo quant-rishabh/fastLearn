@@ -36,6 +36,7 @@ export default function QuizPage() {
   const [finished, setFinished] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
+  const transcriptRef = useRef('');   // final‑confirmed words only
   const [wrongAnswers, setWrongAnswers] = useState<
   { question: string; correct: string; user: string; note?: string }[]
 >([]);
@@ -206,29 +207,33 @@ useEffect(() => {
 
 // ───── Speech‑to‑text: build full transcript every time ──────────
 recognitionRef.current.onresult = (event: any) => {
-  // 1️⃣ Gather everything we already have as FINAL
-  let finalSoFar = '';
-  // 2️⃣ Gather anything that is still INTERIM for this tick
-  let interimNow = '';
+  let interim = '';
+  let finalDelta = '';
 
-  // Loop through *all* results Chrome keeps for this session
-  for (let i = 0; i < event.results.length; i++) {
+  // 📌 only look at new results
+  for (let i = event.resultIndex; i < event.results.length; i++) {
     const chunk = event.results[i][0].transcript.trim();
     if (!chunk) continue;
 
     if (event.results[i].isFinal) {
-      finalSoFar += (finalSoFar ? ' ' : '') + chunk;
+      finalDelta += (finalDelta ? ' ' : '') + chunk;
     } else {
-      interimNow += (interimNow ? ' ' : '') + chunk;
+      interim += (interim ? ' ' : '') + chunk;
     }
   }
 
-  // 3️⃣ Persist the confirmed part
-  setSpeechTranscript(finalSoFar);
+  // 🚚 tack the newly‑finalised words on to whatever the user has now
+  if (finalDelta) {
+    transcriptRef.current =
+      (transcriptRef.current ? transcriptRef.current + ' ' : '') + finalDelta;
+  }
 
-  // 4️⃣ Show confirmed + live interim in the input field
+  // 🔄 update state for React
+  setSpeechTranscript(transcriptRef.current);   // confirmed only
   setInputValue(
-    interimNow ? `${finalSoFar} ${interimNow}`.trim() : finalSoFar
+    interim
+      ? `${transcriptRef.current} ${interim}`.trim()
+      : transcriptRef.current
   );
 };
 
@@ -309,6 +314,8 @@ recognitionRef.current.onresult = (event: any) => {
       }
     }
   }, [globalSpeechEnabled, finished, speechSupported]);
+
+
 
   // Function to handle navigation and cleanup speech recognition
   const handleNavigateHome = () => {
@@ -415,6 +422,11 @@ useEffect(() => {
       isFuzzyMatchArray([answer], [expected], savedThreshold)
     );
   };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  setInputValue(e.target.value);
+  transcriptRef.current = e.target.value;        // <-- NEW
+};
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && inputValue.trim()) {
@@ -869,7 +881,7 @@ useEffect(() => {
                   ref={inputRef}
                   type="text"
                   value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
+                  onChange={handleInputChange}
                   onKeyDown={(e) => {
                     if (totalExpected === 1 && e.key === 'Enter' && inputValue.trim()) {
                       e.preventDefault();
