@@ -29,6 +29,7 @@ interface Topic {
   id: string;
   name: string;
   lesson_id: string;
+  isAiGenerated?: boolean;
 }
 
 export default function Home() {
@@ -41,6 +42,8 @@ export default function Home() {
   const [fetchFromDb, setFetchFromDb] = useState(true);
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+  const [isGeneratingTopics, setIsGeneratingTopics] = useState(false);
+  const [aiTopics, setAiTopics] = useState<Topic[]>([]);
 
   useEffect(() => {
     const stored = localStorage.getItem('fetch_from_db');
@@ -198,6 +201,49 @@ export default function Home() {
     fetchTopics();
   }, [selectedLesson, lessons, fetchFromDb]);
 
+  // Function to generate AI topics
+  const generateAiTopics = async () => {
+    if (!subjectSlug || !selectedLesson) return;
+    
+    setIsGeneratingTopics(true);
+    try {
+      const response = await fetch('/api/ai-generate-topics', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          subject: subjectSlug,
+          lesson: selectedLesson,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setAiTopics(data.topics);
+        setToastMsg('✨ AI topics generated successfully!');
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+      } else {
+        console.error('Failed to generate AI topics:', data.error);
+        setToastMsg('❌ Failed to generate AI topics');
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+      }
+    } catch (error) {
+      console.error('Error generating AI topics:', error);
+      setToastMsg('❌ Error generating AI topics');
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+    } finally {
+      setIsGeneratingTopics(false);
+    }
+  };
+
+  // Combined topics (existing + AI generated)
+  const allTopics = [...topics, ...aiTopics];
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 p-0 text-gray-100">
       {/* Sticky Header */}
@@ -295,20 +341,46 @@ export default function Home() {
         )}
 
         {/* Topic Dropdown */}
-        {topics.length > 0 && (
+        {(topics.length > 0 || (subjectSlug && selectedLesson)) && (
           <div className="mb-4">
-            <label className="block mb-2 font-medium text-purple-300">📚 Select Topic:</label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="font-medium text-purple-300">📚 Select Topic:</label>
+              {subjectSlug && selectedLesson && (
+                <button
+                  onClick={generateAiTopics}
+                  disabled={isGeneratingTopics}
+                  className="px-3 py-1 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGeneratingTopics ? '⏳ Generating...' : '🤖 AI Suggest'}
+                </button>
+              )}
+            </div>
             <select
               value={topicName}
               onChange={(e) => setTopicName(e.target.value)}
               className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 bg-gray-950 text-purple-100 shadow-sm"
             >
               <option value="" className="text-gray-400">-- Choose Topic --</option>
-              {topics.map((topic) => (
-                <option key={topic.id} value={topic.name} className="text-gray-900 bg-purple-100">
-                  {topic.name}
-                </option>
-              ))}
+              {/* Existing topics */}
+              {topics.length > 0 && (
+                <optgroup label="📁 Existing Topics">
+                  {topics.map((topic) => (
+                    <option key={topic.id} value={topic.name} className="text-gray-900 bg-purple-100">
+                      {topic.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {/* AI Generated topics */}
+              {aiTopics.length > 0 && (
+                <optgroup label="🤖 AI Suggested Topics">
+                  {aiTopics.map((topic) => (
+                    <option key={topic.id} value={topic.name} className="text-gray-900 bg-orange-100">
+                      ✨ {topic.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
         )}
@@ -316,16 +388,37 @@ export default function Home() {
         {/* Start Quiz & Learn Buttons */}
         {subjectSlug && selectedLesson && topicName && (
           <div className="flex flex-col gap-3 mt-4">
-            <Link href={`/quiz/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
-              <button className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all flex items-center justify-center gap-2">
-                ▶️ Start Quiz
-              </button>
-            </Link>
-            <Link href={`/learn/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
-              <button className="w-full bg-gradient-to-r from-green-500 to-teal-400 text-gray-900 py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-green-600 hover:to-teal-500 transition-all flex items-center justify-center gap-2">
-                📖 Learn
-              </button>
-            </Link>
+            {/* Check if selected topic is AI-generated */}
+            {(() => {
+              const isAiTopic = aiTopics.some(topic => topic.name === topicName);
+              
+              if (isAiTopic) {
+                // Show Speaking Practice button for AI topics
+                return (
+                  <Link href={`/speaking/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
+                    <button className="w-full bg-gradient-to-r from-orange-600 to-red-500 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-orange-700 hover:to-red-600 transition-all flex items-center justify-center gap-2">
+                      🎤 Start Speaking Practice
+                    </button>
+                  </Link>
+                );
+              } else {
+                // Show Quiz & Learn buttons for existing topics
+                return (
+                  <>
+                    <Link href={`/quiz/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
+                      <button className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all flex items-center justify-center gap-2">
+                        ▶️ Start Quiz
+                      </button>
+                    </Link>
+                    <Link href={`/learn/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
+                      <button className="w-full bg-gradient-to-r from-green-500 to-teal-400 text-gray-900 py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-green-600 hover:to-teal-500 transition-all flex items-center justify-center gap-2">
+                        📖 Learn
+                      </button>
+                    </Link>
+                  </>
+                );
+              }
+            })()}
           </div>
         )}
       </div>
