@@ -44,6 +44,8 @@ export default function Home() {
   const [toastMsg, setToastMsg] = useState('');
   const [isGeneratingTopics, setIsGeneratingTopics] = useState(false);
   const [aiTopics, setAiTopics] = useState<Topic[]>([]);
+  const [previousTopics, setPreviousTopics] = useState<Topic[]>([]);
+  const [selectedMode, setSelectedMode] = useState<'new' | 'previous' | 'drill' | ''>('');
 
   useEffect(() => {
     const stored = localStorage.getItem('fetch_from_db');
@@ -241,6 +243,29 @@ export default function Home() {
     }
   };
 
+  // Function to fetch previous sessions
+  const fetchPreviousSessions = async () => {
+    if (!subjectSlug || !selectedLesson) return;
+    
+    try {
+      const response = await fetch(`/api/get-previous-sessions?subject=${encodeURIComponent(subjectSlug)}&lesson=${encodeURIComponent(selectedLesson)}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setPreviousTopics(data.topics);
+        setToastMsg(`📚 Found ${data.count} previous topics!`);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+      } else {
+        console.error('Failed to fetch previous sessions:', data.error);
+        setPreviousTopics([]);
+      }
+    } catch (error) {
+      console.error('Error fetching previous sessions:', error);
+      setPreviousTopics([]);
+    }
+  };
+
   // Combined topics (existing + AI generated)
   const allTopics = [...topics, ...aiTopics];
 
@@ -304,6 +329,9 @@ export default function Home() {
               setSubjectSlug(e.target.value);
               setSelectedLesson('');
               setTopicName('');
+              setSelectedMode('');
+              setAiTopics([]);
+              setPreviousTopics([]);
             }}
             className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 bg-gray-950 text-purple-100 shadow-sm"
           >
@@ -327,6 +355,9 @@ export default function Home() {
               onChange={(e) => {
                 setSelectedLesson(e.target.value);
                 setTopicName('');
+                setSelectedMode('');
+                setAiTopics([]);
+                setPreviousTopics([]);
               }}
               className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 bg-gray-950 text-purple-100 shadow-sm"
             >
@@ -340,60 +371,137 @@ export default function Home() {
           </div>
         )}
 
-        {/* Topic Dropdown */}
-        {(topics.length > 0 || (subjectSlug && selectedLesson)) && (
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <label className="font-medium text-purple-300">📚 Select Topic:</label>
-              {subjectSlug && selectedLesson && (
-                <button
-                  onClick={generateAiTopics}
-                  disabled={isGeneratingTopics}
-                  className="px-3 py-1 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isGeneratingTopics ? '⏳ Generating...' : '🤖 AI Suggest'}
-                </button>
-              )}
+        {/* Three Mode Selection Buttons */}
+        {subjectSlug && selectedLesson && !selectedMode && (
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold text-purple-300 mb-4 text-center">
+              🎯 What would you like to do?
+            </h3>
+            <div className="grid gap-4">
+              {/* Learn Something New */}
+              <button
+                onClick={() => {
+                  setSelectedMode('new');
+                  generateAiTopics();
+                }}
+                disabled={isGeneratingTopics}
+                className="w-full bg-gradient-to-r from-orange-600 to-red-500 text-white p-4 rounded-lg font-bold shadow hover:scale-105 hover:from-orange-700 hover:to-red-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+              >
+                <span className="text-2xl">🆕</span>
+                <div className="text-left">
+                  <div className="text-lg">{isGeneratingTopics ? 'Generating Topics...' : 'Learn Something New'}</div>
+                  <div className="text-sm opacity-90">AI-generated speaking topics</div>
+                </div>
+              </button>
+
+              {/* Review Previous Sessions */}
+              <button
+                onClick={() => {
+                  setSelectedMode('previous');
+                  fetchPreviousSessions();
+                }}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 rounded-lg font-bold shadow hover:scale-105 hover:from-blue-700 hover:to-purple-700 transition-all flex items-center justify-center gap-3"
+              >
+                <span className="text-2xl">📚</span>
+                <div className="text-left">
+                  <div className="text-lg">Review Previous Sessions</div>
+                  <div className="text-sm opacity-90">Topics you've practiced before</div>
+                </div>
+              </button>
+
+              {/* Practice/Drill */}
+              <button
+                onClick={() => setSelectedMode('drill')}
+                className="w-full bg-gradient-to-r from-green-600 to-teal-500 text-white p-4 rounded-lg font-bold shadow hover:scale-105 hover:from-green-700 hover:to-teal-600 transition-all flex items-center justify-center gap-3"
+              >
+                <span className="text-2xl">🎯</span>
+                <div className="text-left">
+                  <div className="text-lg">Practice/Drill</div>
+                  <div className="text-sm opacity-90">Existing curriculum topics</div>
+                </div>
+              </button>
             </div>
+          </div>
+        )}
+
+        {/* Topic Selection based on Mode */}
+        {selectedMode && (
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <label className="font-medium text-purple-300">
+                {selectedMode === 'new' && '🤖 AI-Generated Topics:'}
+                {selectedMode === 'previous' && '📚 Previous Session Topics:'}
+                {selectedMode === 'drill' && '📁 Curriculum Topics:'}
+              </label>
+              <button
+                onClick={() => {
+                  setSelectedMode('');
+                  setTopicName('');
+                  setAiTopics([]);
+                  setPreviousTopics([]);
+                }}
+                className="px-3 py-1 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700 transition-all"
+              >
+                ← Back
+              </button>
+            </div>
+
             <select
               value={topicName}
               onChange={(e) => setTopicName(e.target.value)}
               className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 bg-gray-950 text-purple-100 shadow-sm"
             >
               <option value="" className="text-gray-400">-- Choose Topic --</option>
-              {/* Existing topics */}
-              {topics.length > 0 && (
-                <optgroup label="📁 Existing Topics">
-                  {topics.map((topic) => (
-                    <option key={topic.id} value={topic.name} className="text-gray-900 bg-purple-100">
-                      {topic.name}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {/* AI Generated topics */}
-              {aiTopics.length > 0 && (
-                <optgroup label="🤖 AI Suggested Topics">
-                  {aiTopics.map((topic) => (
-                    <option key={topic.id} value={topic.name} className="text-gray-900 bg-orange-100">
-                      ✨ {topic.name}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
+              
+              {/* New Topics (AI Generated) */}
+              {selectedMode === 'new' && aiTopics.map((topic) => (
+                <option key={topic.id} value={topic.name} className="text-gray-900 bg-orange-100">
+                  ✨ {topic.name}
+                </option>
+              ))}
+
+              {/* Previous Session Topics */}
+              {selectedMode === 'previous' && previousTopics.map((topic) => (
+                <option key={topic.id} value={topic.name} className="text-gray-900 bg-blue-100">
+                  📚 {topic.name} ({(topic as any).sessionCount} sessions)
+                </option>
+              ))}
+
+              {/* Curriculum Topics */}
+              {selectedMode === 'drill' && topics.map((topic) => (
+                <option key={topic.id} value={topic.name} className="text-gray-900 bg-green-100">
+                  🎯 {topic.name}
+                </option>
+              ))}
             </select>
+
+            {/* Loading/Info Messages */}
+            {selectedMode === 'new' && isGeneratingTopics && (
+              <div className="mt-2 text-center text-orange-300">
+                <span>🤖 Generating AI topics...</span>
+              </div>
+            )}
+            
+            {selectedMode === 'previous' && previousTopics.length === 0 && !isGeneratingTopics && (
+              <div className="mt-2 text-center text-blue-300">
+                <span>📚 No previous sessions found for this lesson.</span>
+              </div>
+            )}
+
+            {selectedMode === 'drill' && topics.length === 0 && (
+              <div className="mt-2 text-center text-green-300">
+                <span>🎯 No curriculum topics available for this lesson.</span>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Start Quiz & Learn Buttons */}
-        {subjectSlug && selectedLesson && topicName && (
+        {/* Action Buttons */}
+        {subjectSlug && selectedLesson && selectedMode && topicName && (
           <div className="flex flex-col gap-3 mt-4">
-            {/* Check if selected topic is AI-generated */}
             {(() => {
-              const isAiTopic = aiTopics.some(topic => topic.name === topicName);
-              
-              if (isAiTopic) {
-                // Show Speaking Practice button for AI topics
+              if (selectedMode === 'new') {
+                // Speaking Practice for AI topics
                 return (
                   <Link href={`/speaking/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
                     <button className="w-full bg-gradient-to-r from-orange-600 to-red-500 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-orange-700 hover:to-red-600 transition-all flex items-center justify-center gap-2">
@@ -401,8 +509,17 @@ export default function Home() {
                     </button>
                   </Link>
                 );
+              } else if (selectedMode === 'previous') {
+                // Speaking Practice for previous topics (to continue practicing)
+                return (
+                  <Link href={`/speaking/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
+                    <button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-blue-700 hover:to-purple-700 transition-all flex items-center justify-center gap-2">
+                      🔄 Continue Practice & View History
+                    </button>
+                  </Link>
+                );
               } else {
-                // Show Quiz & Learn buttons for existing topics
+                // Quiz & Learn for curriculum topics
                 return (
                   <>
                     <Link href={`/quiz/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
