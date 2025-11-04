@@ -17,13 +17,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Short, efficient AI prompt for speech analysis
-    const prompt = `Analyze this English speech in detail: "${speechText}"
-Topic: ${topic}
+    const prompt = `Analyze this English speech about "${topic}": "${speechText}"
 
-Give me:
-1. GRAMMAR MISTAKES - list them where and how to fix 
-2. give better vocabulary suggestions 
-3. how to connect ideas better and thoughts flow`;
+Please provide feedback in the following order:
+1. Grammar and Tenses: be very specific to focus on for eg. need practice on simple past tense, or third form verbs.
+2. Vocabulary Enhancement: Suggest topic-relevant vocab alternative what i have used or what we can use more atlest 5 to 10 according to requriement..( more m oney -> expensive)
+3. Flow and Coherence: Recommend how to better connect ideas and organize thoughts for logical progression how to think connect dots
+4. then you come up with your answer`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -37,7 +37,7 @@ Give me:
           content: prompt
         }
       ],
-      max_tokens: 400,
+      max_tokens: 800,
       temperature: 0.7,
     });
 

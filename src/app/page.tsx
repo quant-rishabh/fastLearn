@@ -45,11 +45,24 @@ export default function Home() {
   const [isGeneratingTopics, setIsGeneratingTopics] = useState(false);
   const [aiTopics, setAiTopics] = useState<Topic[]>([]);
   const [previousTopics, setPreviousTopics] = useState<Topic[]>([]);
-  const [selectedMode, setSelectedMode] = useState<'new' | 'previous' | 'drill' | ''>('');
+  const [selectedMode, setSelectedMode] = useState<'previous' | 'drill' | ''>('');
 
   useEffect(() => {
     const stored = localStorage.getItem('fetch_from_db');
     if (stored) setFetchFromDb(stored === 'true');
+  }, []);
+
+  // Load previously selected subject and lesson on component mount
+  useEffect(() => {
+    const savedSubject = localStorage.getItem('lastSelectedSubject');
+    const savedLesson = localStorage.getItem('lastSelectedLesson');
+    
+    if (savedSubject) {
+      setSubjectSlug(savedSubject);
+    }
+    if (savedLesson) {
+      setSelectedLesson(savedLesson);
+    }
   }, []);
 
   const handleToggleDbFetch = (val: boolean) => {
@@ -120,6 +133,13 @@ export default function Home() {
             const parsed = JSON.parse(cached);
             if (Array.isArray(parsed) && parsed.length > 0) {
               setLessons(parsed);
+              
+              // Restore saved lesson if it exists in the loaded lessons
+              const savedLesson = localStorage.getItem('lastSelectedLesson');
+              if (savedLesson && parsed.some(lesson => lesson.name === savedLesson)) {
+                setSelectedLesson(savedLesson);
+              }
+              
               return; // Exit early, don't fetch from DB
             }
           } catch (e) {
@@ -139,6 +159,12 @@ export default function Home() {
           setLessons(data);
           // Always update cache when we fetch from DB
           localStorage.setItem(cacheKey, JSON.stringify(data));
+          
+          // Restore saved lesson if it exists in the loaded lessons
+          const savedLesson = localStorage.getItem('lastSelectedLesson');
+          if (savedLesson && data.some(lesson => lesson.name === savedLesson)) {
+            setSelectedLesson(savedLesson);
+          }
         } else {
           console.error('Failed to fetch lessons:', error);
         }
@@ -203,8 +229,8 @@ export default function Home() {
     fetchTopics();
   }, [selectedLesson, lessons, fetchFromDb]);
 
-  // Function to generate AI topics
-  const generateAiTopics = async () => {
+  // Function to generate single AI topic and navigate directly
+  const generateAndNavigateToRandomTopic = async () => {
     if (!subjectSlug || !selectedLesson) return;
     
     setIsGeneratingTopics(true);
@@ -222,23 +248,29 @@ export default function Home() {
 
       const data = await response.json();
       
-      if (data.success) {
-        setAiTopics(data.topics);
-        setToastMsg('✨ AI topics generated successfully!');
-        setShowToast(true);
-        setTimeout(() => setShowToast(false), 3000);
+      if (data.success && data.topics.length > 0) {
+        // Pick a random topic from the generated ones
+        const randomTopic = data.topics[Math.floor(Math.random() * data.topics.length)];
+        
+        // Store the topic content in sessionStorage for the speaking page
+        if (randomTopic.content) {
+          sessionStorage.setItem('currentTopicContent', randomTopic.content);
+        }
+        
+        // Navigate directly to speaking practice with the random topic
+        window.location.href = `/speaking/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(randomTopic.name)}`;
       } else {
         console.error('Failed to generate AI topics:', data.error);
         setToastMsg('❌ Failed to generate AI topics');
         setShowToast(true);
         setTimeout(() => setShowToast(false), 3000);
+        setIsGeneratingTopics(false);
       }
     } catch (error) {
       console.error('Error generating AI topics:', error);
       setToastMsg('❌ Error generating AI topics');
       setShowToast(true);
       setTimeout(() => setShowToast(false), 3000);
-    } finally {
       setIsGeneratingTopics(false);
     }
   };
@@ -247,9 +279,21 @@ export default function Home() {
   const fetchPreviousSessions = async () => {
     if (!subjectSlug || !selectedLesson) return;
     
+    console.log('🔍 Fetching previous sessions with:', {
+      subjectSlug,
+      selectedLesson,
+      encodedSubject: encodeURIComponent(subjectSlug),
+      encodedLesson: encodeURIComponent(selectedLesson)
+    });
+    
     try {
-      const response = await fetch(`/api/get-previous-sessions?subject=${encodeURIComponent(subjectSlug)}&lesson=${encodeURIComponent(selectedLesson)}`);
+      const url = `/api/get-previous-sessions?subject=${encodeURIComponent(subjectSlug)}&lesson=${encodeURIComponent(selectedLesson)}`;
+      console.log('🌐 API URL:', url);
+      
+      const response = await fetch(url);
       const data = await response.json();
+      
+      console.log('📊 API Response:', data);
       
       if (data.success) {
         setPreviousTopics(data.topics);
@@ -326,12 +370,22 @@ export default function Home() {
           <select
             value={subjectSlug}
             onChange={(e) => {
-              setSubjectSlug(e.target.value);
+              const selectedSubject = e.target.value;
+              setSubjectSlug(selectedSubject);
               setSelectedLesson('');
               setTopicName('');
               setSelectedMode('');
               setAiTopics([]);
               setPreviousTopics([]);
+              
+              // Save to localStorage
+              if (selectedSubject) {
+                localStorage.setItem('lastSelectedSubject', selectedSubject);
+              } else {
+                localStorage.removeItem('lastSelectedSubject');
+              }
+              // Clear saved lesson when subject changes
+              localStorage.removeItem('lastSelectedLesson');
             }}
             className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 bg-gray-950 text-purple-100 shadow-sm"
           >
@@ -353,11 +407,19 @@ export default function Home() {
             <select
               value={selectedLesson}
               onChange={(e) => {
-                setSelectedLesson(e.target.value);
+                const selectedLessonValue = e.target.value;
+                setSelectedLesson(selectedLessonValue);
                 setTopicName('');
                 setSelectedMode('');
                 setAiTopics([]);
                 setPreviousTopics([]);
+                
+                // Save to localStorage
+                if (selectedLessonValue) {
+                  localStorage.setItem('lastSelectedLesson', selectedLessonValue);
+                } else {
+                  localStorage.removeItem('lastSelectedLesson');
+                }
               }}
               className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 bg-gray-950 text-purple-100 shadow-sm"
             >
@@ -381,16 +443,15 @@ export default function Home() {
               {/* Learn Something New */}
               <button
                 onClick={() => {
-                  setSelectedMode('new');
-                  generateAiTopics();
+                  generateAndNavigateToRandomTopic();
                 }}
                 disabled={isGeneratingTopics}
                 className="w-full bg-gradient-to-r from-orange-600 to-red-500 text-white p-4 rounded-lg font-bold shadow hover:scale-105 hover:from-orange-700 hover:to-red-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
               >
                 <span className="text-2xl">🆕</span>
                 <div className="text-left">
-                  <div className="text-lg">{isGeneratingTopics ? 'Generating Topics...' : 'Learn Something New'}</div>
-                  <div className="text-sm opacity-90">AI-generated speaking topics</div>
+                  <div className="text-lg">{isGeneratingTopics ? 'Getting Random Topic...' : 'Learn Something New'}</div>
+                  <div className="text-sm opacity-90">Jump to a random AI topic</div>
                 </div>
               </button>
 
@@ -429,7 +490,6 @@ export default function Home() {
           <div className="mb-4">
             <div className="flex items-center justify-between mb-3">
               <label className="font-medium text-purple-300">
-                {selectedMode === 'new' && '🤖 AI-Generated Topics:'}
                 {selectedMode === 'previous' && '📚 Previous Session Topics:'}
                 {selectedMode === 'drill' && '📁 Curriculum Topics:'}
               </label>
@@ -452,13 +512,6 @@ export default function Home() {
               className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 bg-gray-950 text-purple-100 shadow-sm"
             >
               <option value="" className="text-gray-400">-- Choose Topic --</option>
-              
-              {/* New Topics (AI Generated) */}
-              {selectedMode === 'new' && aiTopics.map((topic) => (
-                <option key={topic.id} value={topic.name} className="text-gray-900 bg-orange-100">
-                  ✨ {topic.name}
-                </option>
-              ))}
 
               {/* Previous Session Topics */}
               {selectedMode === 'previous' && previousTopics.map((topic) => (
@@ -476,12 +529,6 @@ export default function Home() {
             </select>
 
             {/* Loading/Info Messages */}
-            {selectedMode === 'new' && isGeneratingTopics && (
-              <div className="mt-2 text-center text-orange-300">
-                <span>🤖 Generating AI topics...</span>
-              </div>
-            )}
-            
             {selectedMode === 'previous' && previousTopics.length === 0 && !isGeneratingTopics && (
               <div className="mt-2 text-center text-blue-300">
                 <span>📚 No previous sessions found for this lesson.</span>
@@ -500,21 +547,12 @@ export default function Home() {
         {subjectSlug && selectedLesson && selectedMode && topicName && (
           <div className="flex flex-col gap-3 mt-4">
             {(() => {
-              if (selectedMode === 'new') {
-                // Speaking Practice for AI topics
+              if (selectedMode === 'previous') {
+                // Direct link to analysis view for previous topics
                 return (
-                  <Link href={`/speaking/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
-                    <button className="w-full bg-gradient-to-r from-orange-600 to-red-500 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-orange-700 hover:to-red-600 transition-all flex items-center justify-center gap-2">
-                      🎤 Start Speaking Practice
-                    </button>
-                  </Link>
-                );
-              } else if (selectedMode === 'previous') {
-                // Speaking Practice for previous topics (to continue practicing)
-                return (
-                  <Link href={`/speaking/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
+                  <Link href={`/speaking/analysis/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
                     <button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-blue-700 hover:to-purple-700 transition-all flex items-center justify-center gap-2">
-                      🔄 Continue Practice & View History
+                      � View Analysis & Results
                     </button>
                   </Link>
                 );

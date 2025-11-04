@@ -3,7 +3,7 @@ import { supabase } from '@/utils/supabase';
 
 export async function POST(request: NextRequest) {
   try {
-    const { subject, lesson, topic, speechText, aiFeedback, duration } = await request.json();
+    const { subject, lesson, topic, speechText, aiFeedback, duration, topicContent } = await request.json();
 
     if (!subject || !lesson || !topic || !speechText || !aiFeedback) {
       return NextResponse.json(
@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
           duration_seconds: duration || 0,
           word_count: speechText.split(' ').length,
           overall_score: aiFeedback.overall_score || 0,
+          topic_content: topicContent || null, // Store the guiding questions
           created_at: new Date().toISOString()
         }
       ])

@@ -31,6 +31,8 @@ export default function SpeakingPage() {
   const [aiFeedback, setAiFeedback] = useState(null);
   const [recordingTime, setRecordingTime] = useState(0);
   const [hasStarted, setHasStarted] = useState(false);
+  const [topicContent, setTopicContent] = useState<string>('');
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
   
   const recognitionRef = useRef<any>(null);
   const timerRef = useRef<any>(null);
@@ -91,6 +93,45 @@ export default function SpeakingPage() {
     };
   }, [isRecording, isPaused]);
 
+  // Check for stored AI topic content or fetch from previous sessions
+  useEffect(() => {
+    const fetchTopicContent = async () => {
+      // First, check for stored content from "Learn Something New"
+      const storedContent = sessionStorage.getItem('currentTopicContent');
+      if (storedContent) {
+        setTopicContent(storedContent);
+        sessionStorage.removeItem('currentTopicContent');
+        return;
+      }
+
+      // If no stored content, check if this is a previous session topic
+      // by fetching from the database
+      if (subject && lesson && topic) {
+        setIsLoadingContent(true);
+        try {
+          const decodedSubject = decodeURIComponent(subject as string);
+          const decodedLesson = decodeURIComponent(lesson as string);
+          const decodedTopic = decodeURIComponent(topic as string);
+
+          const response = await fetch(`/api/get-topic-content?subject=${encodeURIComponent(decodedSubject)}&lesson=${encodeURIComponent(decodedLesson)}&topic=${encodeURIComponent(decodedTopic)}`);
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.topicContent) {
+              setTopicContent(data.topicContent);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching topic content:', error);
+        } finally {
+          setIsLoadingContent(false);
+        }
+      }
+    };
+
+    fetchTopicContent();
+  }, [subject, lesson, topic]);
+
   const startRecording = () => {
     if (recognitionRef.current) {
       setHasStarted(true);
@@ -149,9 +190,9 @@ export default function SpeakingPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          subject: subject,
-          lesson: lesson,
-          topic: topic,
+          subject: decodeURIComponent(subject as string),
+          lesson: decodeURIComponent(lesson as string),
+          topic: decodeURIComponent(topic as string),
           speechText: speechText,
         }),
       });
@@ -185,12 +226,13 @@ export default function SpeakingPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          subject: subject,
-          lesson: lesson,
-          topic: topic,
+          subject: decodeURIComponent(subject as string),
+          lesson: decodeURIComponent(lesson as string),
+          topic: decodeURIComponent(topic as string),
           speechText: speechText,
           aiFeedback: analysis,
           duration: recordingTime,
+          topicContent: topicContent, // Include the guiding questions
         }),
       });
 
@@ -206,6 +248,26 @@ export default function SpeakingPage() {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Simple markdown renderer for topic content
+  const renderMarkdown = (content: string) => {
+    const lines = content.split('\n');
+    return lines.map((line, index) => {
+      const trimmedLine = line.trim();
+      
+      if (trimmedLine.startsWith('# ')) {
+        return <h1 key={index} className="text-2xl font-bold text-orange-300 mb-4">{trimmedLine.substring(2)}</h1>;
+      } else if (trimmedLine.startsWith('## ')) {
+        return <h2 key={index} className="text-xl font-semibold text-orange-200 mb-3 mt-4">{trimmedLine.substring(3)}</h2>;
+      } else if (trimmedLine.match(/^\d+\.\s/)) {
+        return <p key={index} className="text-orange-100 mb-2 ml-4">{trimmedLine}</p>;
+      } else if (trimmedLine.length > 0) {
+        return <p key={index} className="text-orange-100 mb-2">{trimmedLine}</p>;
+      } else {
+        return <br key={index} />;
+      }
+    });
   };
 
   return (
@@ -243,6 +305,16 @@ export default function SpeakingPage() {
             The AI will analyze your speech and provide vocabulary suggestions and speaking tips.
           </p>
         </div>
+
+        {/* AI Topic Content */}
+        {topicContent && (
+          <div className="bg-orange-900/30 border border-orange-600/30 p-4 rounded-lg mb-6">
+            <h2 className="text-lg font-semibold text-orange-300 mb-2">🤖 AI-Generated Topic</h2>
+            <div className="text-orange-100">
+              {renderMarkdown(topicContent)}
+            </div>
+          </div>
+        )}
 
         {/* Recording Controls */}
         <div className="bg-gray-800 p-6 rounded-lg mb-6">

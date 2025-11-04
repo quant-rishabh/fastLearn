@@ -17,6 +17,7 @@ interface SpeakingSession {
   overall_score: number;
   duration_seconds: number;
   word_count: number;
+  topic_content?: string;
   created_at: string;
 }
 
@@ -68,6 +69,26 @@ export default function SpeakingHistoryPage() {
     if (score >= 80) return 'text-green-400';
     if (score >= 60) return 'text-yellow-400';
     return 'text-red-400';
+  };
+
+  // Simple markdown renderer for topic content
+  const renderMarkdown = (content: string) => {
+    const lines = content.split('\n');
+    return lines.map((line, index) => {
+      const trimmedLine = line.trim();
+      
+      if (trimmedLine.startsWith('# ')) {
+        return <h1 key={index} className="text-2xl font-bold text-orange-300 mb-4">{trimmedLine.substring(2)}</h1>;
+      } else if (trimmedLine.startsWith('## ')) {
+        return <h2 key={index} className="text-xl font-semibold text-orange-200 mb-3 mt-4">{trimmedLine.substring(3)}</h2>;
+      } else if (trimmedLine.match(/^\d+\.\s/)) {
+        return <p key={index} className="text-orange-100 mb-2 ml-4">{trimmedLine}</p>;
+      } else if (trimmedLine.length > 0) {
+        return <p key={index} className="text-orange-100 mb-2">{trimmedLine}</p>;
+      } else {
+        return <br key={index} />;
+      }
+    });
   };
 
   if (isLoading) {
@@ -154,6 +175,18 @@ export default function SpeakingHistoryPage() {
                   <div className="text-sm text-gray-400">Words Spoken</div>
                 </div>
               </div>
+
+              {/* Topic Content (Guiding Questions) */}
+              {selectedSession.topic_content && (
+                <div className="mb-8">
+                  <h3 className="text-lg font-semibold text-orange-300 mb-3">🎯 Topic Guidance:</h3>
+                  <div className="bg-orange-900/20 border border-orange-600/30 p-4 rounded-lg">
+                    <div className="text-orange-100">
+                      {renderMarkdown(selectedSession.topic_content)}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Your Speech */}
               <div className="mb-8">
