@@ -16,29 +16,54 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Short, efficient AI prompt for speech analysis
+    // Detailed AI prompt for structured speech analysis
     const prompt = `Analyze this English speech about "${topic}": "${speechText}"
 
-Please provide feedback in the following order:
-1. Grammar and Tenses: be very specific to focus on for eg. need practice on simple past tense, or third form verbs.
-2. Vocabulary Enhancement: Suggest topic-relevant vocab alternative what i have used or what we can use more atlest 5 to 10 according to requriement..( more m oney -> expensive)
-3. Flow and Coherence: Recommend how to better connect ideas and organize thoughts for logical progression how to think connect dots
-4. then you come up with your answer`;
+Provide detailed feedback in this EXACT format:
+
+## Feedback on Speech: "${topic}"
+
+### 1. Grammar and Tenses:
+• [Specific grammar issue with example from the speech]
+- [Correction with proper grammar rule explanation]
+• [Practice recommendation for specific tense usage, e.g., "Practice conditional tense: 'If I had..., I would...'"]
+- [Example of how to use it in this context]
+
+### 2. Vocabulary Enhancement:
+• [Identify basic words used and suggest better alternatives]
+- Instead of "[basic word]," use more specific terms like "[advanced word 1]," "[advanced word 2]," or "[advanced word 3]"
+• [Topic-specific vocabulary suggestions]
+- Use descriptive adjectives like "[adjective 1]," "[adjective 2]," or "[adjective 3]"
+
+### 3. Flow and Coherence:
+• [Specific recommendation for better organization]
+- [Example of how to structure the opening: "Start with..."]
+• [Transitional phrase suggestions]
+- Use connecting words like "First," "Next," "Furthermore," and "Finally" to guide your audience
+• [Logical progression advice with specific examples]
+
+### 4. My Response:
+• [Overall assessment of the speech]
+- [Specific improvements needed with examples]
+• [Complete rewrite example showing better structure]
+- "For example, you could start with: '[Improved opening sentence]' This approach would help..."
+
+Be very specific with examples from the actual speech and provide concrete suggestions for improvement.`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: "Analyze English speech. Give concise feedback on grammar, vocabulary, flow, and confidence."
+          content: "You are an expert English speech coach. Provide detailed, structured feedback using markdown formatting with specific examples and concrete suggestions. Always follow the exact format requested with proper headers, bullet points, and detailed explanations."
         },
         {
           role: "user",
           content: prompt
         }
       ],
-      max_tokens: 800,
-      temperature: 0.7,
+      max_tokens: 1200,
+      temperature: 0.5,
     });
 
     const aiResponse = completion.choices[0]?.message?.content;
