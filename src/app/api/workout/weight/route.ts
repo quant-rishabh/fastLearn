@@ -1,32 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/utils/supabase';
 
-// Save weight entry
+// Save weight entry (single-user optimized)
 export async function POST(request: NextRequest) {
   try {
     const { 
-      userId,
       weight,
-      date = new Date().toISOString().split('T')[0],
-      notes
+      date = new Date().toISOString().split('T')[0]
     } = await request.json();
 
-    const { data: weightEntry, error } = await supabase
-      .from('weight_history')
+    if (!weight) {
+      return NextResponse.json({ error: 'Weight is required' }, { status: 400 });
+    }
+
+    // Log weight in weight_logs table
+    const { data: weightEntry, error: logError } = await supabase
+      .from('weight_logs')
       .upsert({
-        user_id: userId,
-        weight: weight,
         date: date,
-        notes: notes
+        weight: weight
       }, {
-        onConflict: 'user_id,date'
+        onConflict: 'date'
       })
       .select()
       .single();
 
-    if (error) {
-      console.error('Error saving weight:', error);
+    if (logError) {
+      console.error('Error saving weight log:', logError);
       return NextResponse.json({ error: 'Failed to save weight' }, { status: 500 });
+    }
+
+    // Update current_weight in user_profile if it's today's weight
+    const today = new Date().toISOString().split('T')[0];
+    if (date === today) {
+      const { error: profileError } = await supabase
+        .from('user_profile')
+        .update({ current_weight: weight })
+        .eq('id', (await supabase.from('user_profile').select('id').single()).data?.id);
+
+      if (profileError) {
+        console.error('Error updating profile weight:', profileError);
+        // Don't fail the whole request
+      }
     }
 
     return NextResponse.json({ weightEntry, success: true });
@@ -37,22 +52,19 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Get weight history
+// Get weight history (single-user optimized)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
     const days = searchParams.get('days') || '30'; // Last 30 days by default
 
-    if (!userId) {
-      return NextResponse.json({ error: 'User ID required' }, { status: 400 });
-    }
+    // Calculate date range
+    const startDate = new Date(Date.now() - parseInt(days) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const { data: weightHistory, error } = await supabase
-      .from('weight_history')
+      .from('weight_logs')
       .select('*')
-      .eq('user_id', userId)
-      .gte('date', new Date(Date.now() - parseInt(days) * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+      .gte('date', startDate)
       .order('date', { ascending: true });
 
     if (error) {

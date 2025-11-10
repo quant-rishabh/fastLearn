@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import ChatComponent from '@/components/ChatComponent';
+import DailyWeightTracker from '@/components/DailyWeightTracker';
 import { 
   saveActivity, 
   getTodayActivities, 
@@ -16,6 +17,7 @@ import {
   type DailyTracking
 } from '@/utils/workoutDatabase';
 import { isLoggedIn, getCurrentUser, getUserProfile, logoutUser } from '@/utils/auth';
+import { getWeightProgress } from '@/utils/dailyWeight';
 
 interface UserStats {
   currentWeight: number;
@@ -39,6 +41,7 @@ export default function WorkoutPage() {
     weeklyWeightLoss: 0.5 // kg per week
   });
 
+  // Initialize current weight with default, will be updated when user loads
   const [currentWeight, setCurrentWeight] = useState(86);
 
   // Check authentication on page load
@@ -55,95 +58,48 @@ export default function WorkoutPage() {
       setUser(currentUser);
       setUserProfile(profile);
       
-      // Update user stats from profile
-      setUserStats({
-        currentWeight: profile.currentWeight,
+      // Load profile settings and current weight from profile
+      setUserStats(prev => ({
+        ...prev,
         targetWeight: profile.targetWeight,
         height: profile.height,
         age: profile.age,
         weeklyWeightLoss: profile.weeklyGoal
-      });
-      setCurrentWeight(profile.currentWeight);
+      }));
+      
+      // PRIORITY: Use profile currentWeight if it exists and is not default
+      let initialWeight = currentWeight; // fallback
+      
+      if (profile.currentWeight && profile.currentWeight !== 86) {
+        // Profile has a saved weight - use it as primary source
+        initialWeight = profile.currentWeight;
+        console.log('Loading weight from profile:', initialWeight, 'kg');
+      } else {
+        // No saved profile weight, check daily tracking as backup
+        const dailyWeight = getWeightProgress(currentUser.username);
+        if (dailyWeight.currentWeight && dailyWeight.currentWeight !== 70) {
+          initialWeight = dailyWeight.currentWeight;
+          console.log('Loading weight from daily tracking:', initialWeight, 'kg');
+        }
+      }
+      
+      setCurrentWeight(initialWeight);
+      setUserStats(prev => ({ ...prev, currentWeight: initialWeight }));
     }
   }, [router]);
 
   // Daily tracking state
   const [dailyActivities, setDailyActivities] = useState<Activity[]>([]);
   const [dailyTracking, setDailyTracking] = useState<DailyTracking | null>(null);
+  const [todayTotals, setTodayTotals] = useState<any>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [analytics, setAnalytics] = useState<any>(null);
   const [systemStatus, setSystemStatus] = useState<string>('');
 
-  // Exercise formulas
-  const calculateExerciseCalories = (exercise: string, params: any, userWeight: number) => {
-    switch (exercise.toLowerCase()) {
-      // 1. CARDIO EXERCISES
-      case 'running':
-        // Accurate Formula: Weight(kg) × Distance(km) × 1.0 (standard running calorie burn)
-        const runningCals = userWeight * (params.distance || 0) * 1.0;
-        return Math.round(runningCals);
-      
-      case 'skipping':
-        // Formula: Time(min) × Weight(kg) × 0.12 (12 cal/min/kg for moderate skipping)
-        const skippingCals = (params.time || 0) * userWeight * 0.12;
-        return Math.round(skippingCals);
-      
-      case 'walking':
-        // Formula: Steps × Weight(kg) × 0.00004 → FIXED: Steps × Weight(kg) × 0.00004 × 10
-        // Correct: 0.04 kcal per step per kg = 5000 × 86 × 0.00004 × 10 = 172 kcal
-        const walkingCals = (params.steps || 0) * userWeight * 0.0004;
-        return Math.round(walkingCals);
+  // Note: Exercise calories are now calculated by AI via /api/ai-analyze-exercise
 
-      // 2. BODYWEIGHT EXERCISES
-      case 'pushups':
-        // Formula: Reps × Weight(kg) × 0.0025 (0.25% of body weight per rep)
-        return Math.round((params.reps || 0) * userWeight * 0.0025);
-      
-      case 'squats':
-        // Formula: Reps × Weight(kg) × 0.003 (0.3% of body weight per rep)
-        return Math.round((params.reps || 0) * userWeight * 0.003);
-      
-      case 'crunches':
-        // Formula: Reps × Weight(kg) × 0.002 (0.2% of body weight per rep)
-        return Math.round((params.reps || 0) * userWeight * 0.002);
-
-      // 3. WEIGHT EXERCISES
-      case 'bench press':
-        // Formula: Weight(kg) × Reps × 0.004 (more conservative)
-        return Math.round((params.weight || 0) * (params.reps || 0) * 0.004);
-      
-      case 'deadlifts':
-        // Formula: Weight(kg) × Reps × 0.005 (compound movement)
-        return Math.round((params.weight || 0) * (params.reps || 0) * 0.005);
-      
-      case 'squats with weight':
-        // Formula: Weight(kg) × Reps × 0.0045 (compound movement)
-        return Math.round((params.weight || 0) * (params.reps || 0) * 0.0045);
-      
-      default:
-        return 0;
-    }
-  };
-
-  // Food calorie database
-  const getFoodCalories = (food: string, quantity: number) => {
-    const foodDb: { [key: string]: number } = {
-      // Per unit calories
-      'banana': 89,
-      'apple': 95,
-      'egg': 70,
-      'bread slice': 80,
-      'rice cup': 205,
-      'chicken breast 100g': 165,
-      'milk glass': 150,
-      'orange': 62,
-      'potato medium': 161,
-      'pasta cup': 220
-    };
-    
-    return (foodDb[food.toLowerCase()] || 0) * quantity;
-  };
+  // Note: Food calories are now calculated by AI via /api/ai-get-calories
 
   // Load data on component mount
   useEffect(() => {
@@ -152,6 +108,13 @@ export default function WorkoutPage() {
     loadAnalytics();
   }, []);
 
+  // Load user stats when user changes (but don't override current weight)
+  useEffect(() => {
+    if (user?.username) {
+      loadUserStats();
+    }
+  }, [user]);
+
   // Save user stats when they change
   useEffect(() => {
     if (!isLoadingData) {
@@ -159,16 +122,78 @@ export default function WorkoutPage() {
     }
   }, [userStats, currentWeight]);
 
+  // Fallback function to load activities directly from the database/API
+  const loadActivitiesFallback = async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      // Try using the supabase directly or a simpler API approach
+      const { supabase } = await import('@/utils/supabase');
+      
+      const { data: activities, error } = await supabase
+        .from('activities')
+        .select('*')
+        .eq('date', today)
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Fallback error:', error);
+        setSystemStatus('Using local mode - database connection issues');
+        return;
+      }
+      
+      console.log('Fallback activities loaded:', activities);
+      setDailyActivities(activities || []);
+      setSystemStatus('Data loaded via fallback method');
+    } catch (error) {
+      console.error('Fallback failed:', error);
+      setSystemStatus('Using local mode');
+    }
+  };
+
   const loadTodayData = async () => {
     try {
       setIsLoadingData(true);
-      const response = await getTodayActivities();
-      if (response.success) {
-        setDailyActivities(response.activities || []);
-        setDailyTracking(response.dailyTracking);
-        if (response.message) {
-          setSystemStatus(response.message);
+      // Use new optimized API endpoint
+      const response = await fetch('/api/workout/activities?date=today');
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('API Response:', result); // Debug log
+        
+        if (result.success && result.todayData) {
+          // Extract data from the optimized single-query response
+          const todayData = result.todayData;
+          console.log('Today Data:', todayData); // Debug log
+          
+          // Try different possible field names for activities
+          const activities = todayData.today_activities || 
+                           todayData.activities || 
+                           todayData.todayActivities || 
+                           [];
+          
+          console.log('Activities found:', activities); // Debug log
+          setDailyActivities(activities);
+          setTodayTotals(todayData.today_totals || null);
+          
+          // Update user stats with the latest profile data
+          if (todayData.user_profile) {
+            setUserStats(prev => ({
+              ...prev,
+              targetWeight: todayData.user_profile.target_weight,
+              weeklyWeightLoss: todayData.user_profile.weekly_weight_loss
+            }));
+          }
+          
+          setSystemStatus('Data loaded successfully');
+        } else {
+          console.log('No todayData or not successful:', result);
+          // Fallback: Try to load activities directly
+          await loadActivitiesFallback();
         }
+      } else {
+        setSystemStatus('Error loading data from API');
+        // Fallback: Try to load activities directly
+        await loadActivitiesFallback();
       }
     } catch (error) {
       console.error('Error loading today data:', error);
@@ -182,13 +207,17 @@ export default function WorkoutPage() {
     try {
       const response = await getUserStats();
       if (response.success && response.userStats) {
+        // Load target weight and weekly goals but preserve profile current weight
         setUserStats(prev => ({
           ...prev,
-          currentWeight: response.userStats.current_weight,
           targetWeight: response.userStats.target_weight,
           weeklyWeightLoss: response.userStats.weekly_weight_loss
+          // Don't override currentWeight from database - profile is the source of truth
         }));
-        setCurrentWeight(response.userStats.current_weight);
+        
+        console.log('loadUserStats - Loaded target weight:', response.userStats.target_weight);
+        console.log('loadUserStats - Loaded weekly goal:', response.userStats.weekly_weight_loss);
+        console.log('loadUserStats - Current weight preserved from profile:', currentWeight, 'kg');
       }
     } catch (error) {
       console.error('Error loading user stats:', error);
@@ -218,6 +247,51 @@ export default function WorkoutPage() {
       );
     } catch (error) {
       console.error('Error saving user stats:', error);
+    }
+  };
+
+  // Save current weight to user profile database
+  const handleSaveCurrentWeight = async () => {
+    try {
+      // Update the user profile with new current weight
+      const currentUser = getCurrentUser();
+      const currentProfile = getUserProfile();
+      
+      if (currentUser && currentProfile) {
+        // Import the updateUserProfile function
+        const { updateUserProfile } = await import('@/utils/auth');
+        
+        // Update the main user profile in auth system (this is the primary source)
+        const updateResult = updateUserProfile({ currentWeight: currentWeight });
+        
+        if (updateResult.success) {
+          // Update the profile object
+          const updatedProfile = {
+            ...currentProfile,
+            currentWeight: currentWeight
+          };
+          
+          // Also save weight entry for daily tracking
+          await saveWeight(currentWeight, currentUser.username);
+          
+          // Save to user stats database
+          await handleSaveUserStats();
+          
+          console.log('Current weight saved to profile:', currentWeight, 'kg');
+          
+          // Update local state to reflect the saved data
+          setUserProfile(updatedProfile);
+          
+          return true;
+        } else {
+          console.error('Failed to update user profile:', updateResult.message);
+          return false;
+        }
+      }
+      return false;
+    } catch (error) {
+      console.error('Error saving current weight:', error);
+      return false;
     }
   };
 
@@ -278,11 +352,30 @@ export default function WorkoutPage() {
   };
 
   const handleWeightUpdate = async (newWeight: number) => {
+    // Update local state immediately
     setCurrentWeight(newWeight);
-    try {
-      await saveWeight(newWeight);
-    } catch (error) {
-      console.error('Error saving weight:', error);
+    
+    // Update userStats to reflect the new current weight
+    setUserStats(prev => ({
+      ...prev,
+      currentWeight: newWeight
+    }));
+    
+    // Note: The weight is already saved by the DailyWeightTracker component
+    // We just need to update our local state to use the new weight for calculations
+    console.log('Current weight updated to:', newWeight, 'kg');
+  };
+
+  // Function to refresh current weight from daily entries
+  const refreshCurrentWeight = () => {
+    if (user?.username) {
+      const weightProgress = getWeightProgress(user.username);
+      const newWeight = weightProgress.currentWeight;
+      setCurrentWeight(newWeight);
+      setUserStats(prev => ({
+        ...prev,
+        currentWeight: newWeight
+      }));
     }
   };
 
@@ -297,22 +390,24 @@ export default function WorkoutPage() {
 
   // BMR calculation using Mifflin-St Jeor equation (for males)
   const calculateBMR = (weight: number) => {
-    return 10 * weight + 6.25 * userStats.height - 5 * userStats.age + 5;
+    const height = userStats.height || 175;
+    const age = userStats.age || 25;
+    return 10 * (weight || 0) + 6.25 * height - 5 * age + 5;
   };
 
   // Simple maintenance calculation - Sedentary lifestyle (×1.2)
   const calculateMaintenance = (bmr: number) => {
-    return bmr * 1.2; // Sedentary: Office job, no exercise
+    return (bmr || 0) * 1.2; // Sedentary: Office job, no exercise
   };
 
   // Weekly weight loss calculations
   const caloriesPerKg = 7700; // Calories needed to lose 1kg of body fat (scientifically accurate)
-  const weeklyCalorieDeficit = userStats.weeklyWeightLoss * caloriesPerKg;
+  const weeklyCalorieDeficit = (userStats.weeklyWeightLoss || 0.5) * caloriesPerKg;
   const dailyCalorieDeficit = weeklyCalorieDeficit / 7;
 
   // Calculate total weight loss needed and timeline
-  const totalWeightLoss = currentWeight - userStats.targetWeight;
-  const weeksNeeded = totalWeightLoss / userStats.weeklyWeightLoss;
+  const totalWeightLoss = (currentWeight || 0) - (userStats.targetWeight || 70);
+  const weeksNeeded = totalWeightLoss / (userStats.weeklyWeightLoss || 0.5);
   const monthsNeeded = weeksNeeded / 4.33;
 
   // BMR and maintenance calculations
@@ -321,17 +416,26 @@ export default function WorkoutPage() {
   const targetDailyCalories = maintenanceCalories - dailyCalorieDeficit;
 
   // Progress calculations
-  const weightLostSoFar = userStats.currentWeight - currentWeight;
-  const progressPercentage = (weightLostSoFar / totalWeightLoss) * 100;
+  const weightLostSoFar = (userStats.currentWeight || 0) - (currentWeight || 0);
+  const progressPercentage = totalWeightLoss > 0 ? (weightLostSoFar / totalWeightLoss) * 100 : 0;
 
-  // Calculate daily totals
-  const todayCaloriesFromExercise = dailyActivities.filter(a => a.type === 'exercise').reduce((sum, a) => sum + a.calories, 0);
-  const todayCaloriesFromFood = dailyActivities.filter(a => a.type === 'food').reduce((sum, a) => sum + Math.abs(a.calories), 0);
-  const todayNetCalories = dailyActivities.reduce((sum, a) => sum + a.calories, 0);
+  // Calculate daily totals - use optimized database data when available
+  const todayCaloriesFromExercise = (todayTotals && todayTotals.calories_burned_exercise) ? 
+    todayTotals.calories_burned_exercise : 
+    dailyActivities.filter(a => a.type === 'exercise').reduce((sum, a) => sum + (a.calories || 0), 0);
+  const todayCaloriesFromFood = (todayTotals && todayTotals.calories_consumed) ? 
+    todayTotals.calories_consumed : 
+    dailyActivities.filter(a => a.type === 'food').reduce((sum, a) => sum + Math.abs(a.calories || 0), 0);
+  const todayNetCalories = (todayTotals && todayTotals.net_calories) ? 
+    todayTotals.net_calories : 
+    dailyActivities.reduce((sum, a) => sum + (a.calories || 0), 0);
   
   // Updated daily numbers
-  const todayMaintenanceCalories = maintenanceCalories + todayCaloriesFromExercise;
-  const todayRemainingToEat = (targetDailyCalories + todayCaloriesFromExercise) - todayCaloriesFromFood;
+  const todayMaintenanceCalories = (maintenanceCalories || 0) + todayCaloriesFromExercise;
+  
+  // ALWAYS calculate balance in real-time based on current weight (don't use cached value)
+  const todayRemainingToEat = ((targetDailyCalories || 0) + todayCaloriesFromExercise) - todayCaloriesFromFood;
+  
   const todayActualDeficit = todayMaintenanceCalories - todayCaloriesFromFood;
 
   // Quick Food Add Component
@@ -374,9 +478,33 @@ export default function WorkoutPage() {
       
       const calories = await getCaloriesFromAI(foodDescription);
       
-      await addActivity('food', foodDescription, 'AI calculated', calories, 'ai_food', null, true);
-      setLastLookup(`${foodDescription} = ${calories} calories`);
-      setFoodDescription('');
+      // Use new API endpoint directly (bypassing old addActivity function)
+      try {
+        const response = await fetch('/api/workout/activities', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'food',
+            description: `${foodDescription} (${calories} cal)`,
+            category: 'food', // Default food category
+            calories: calories,
+            protein_grams: 0 // We could enhance this with AI later
+          })
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          // Refresh today's data
+          await loadTodayData();
+          setLastLookup(`${foodDescription} = ${calories} calories`);
+          setFoodDescription('');
+        } else {
+          console.error('Failed to save food');
+        }
+      } catch (error) {
+        console.error('Error saving food:', error);
+        setLastLookup(`Error saving: ${foodDescription}`);
+      }
     };
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -430,139 +558,141 @@ export default function WorkoutPage() {
     );
   };
 
-  // Quick Exercise Add Component
-  const QuickExerciseAdd = ({ addActivity, calculateExerciseCalories, currentWeight }: any) => {
-    const [selectedExercise, setSelectedExercise] = useState('');
-    const [exerciseParams, setExerciseParams] = useState<any>({});
+  // Quick Exercise Add Component - AI Powered
+  const QuickExerciseAdd = ({ addActivity, currentWeight }: any) => {
+    const [exerciseDescription, setExerciseDescription] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [lastLookup, setLastLookup] = useState('');
 
-    const exerciseCategories = {
-      cardio: [
-        { name: 'running', params: ['time', 'distance'], units: ['minutes', 'km'] },
-        { name: 'skipping', params: ['time'], units: ['minutes'] },
-        { name: 'walking', params: ['steps'], units: ['total steps'] }
-      ],
-      bodyweight: [
-        { name: 'pushups', params: ['reps'], units: ['reps'] },
-        { name: 'squats', params: ['reps'], units: ['reps'] },
-        { name: 'crunches', params: ['reps'], units: ['reps'] }
-      ],
-      weights: [
-        { name: 'bench press', params: ['weight', 'reps'], units: ['kg', 'reps'] },
-        { name: 'deadlifts', params: ['weight', 'reps'], units: ['kg', 'reps'] },
-        { name: 'squats with weight', params: ['weight', 'reps'], units: ['kg', 'reps'] }
-      ]
-    };
+    const getExerciseDataFromAI = async (description: string) => {
+      try {
+        setIsLoading(true);
+        const response = await fetch('/api/ai-analyze-exercise', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            exercise: description,
+            userWeight: currentWeight,
+            userProfile: {
+              weight: currentWeight,
+              height: userStats.height,
+              age: userStats.age,
+              gender: 'male' // assuming male for BMR calculation
+            }
+          }),
+        });
 
-    const handleAddExercise = async () => {
-      if (selectedExercise) {
-        const calories = calculateExerciseCalories(selectedExercise, exerciseParams, currentWeight);
-        const selectedEx = [...exerciseCategories.cardio, ...exerciseCategories.bodyweight, ...exerciseCategories.weights]
-          .find(ex => ex.name === selectedExercise);
-        
-        const details = selectedEx?.params.map((param, index) => 
-          `${exerciseParams[param] || 0} ${selectedEx.units[index]}`
-        ).join(', ') || '';
-        
-        // Determine category based on exercise grouping
-        let category = 'bodyweight';
-        if (exerciseCategories.cardio.some(ex => ex.name === selectedExercise)) {
-          category = 'cardio';
-        } else if (exerciseCategories.weights.some(ex => ex.name === selectedExercise)) {
-          category = 'weights';
+        if (!response.ok) {
+          throw new Error('Failed to analyze exercise');
         }
-        
-        await addActivity('exercise', selectedExercise, details, calories, category, exerciseParams);
-        setSelectedExercise('');
-        setExerciseParams({});
+
+        const data = await response.json();
+        return {
+          calories: data.calories || 0,
+          category: data.category || 'general',
+          enhancedDescription: data.enhancedDescription || description,
+          proteinGrams: null // exercises don't provide protein
+        };
+      } catch (error) {
+        console.error('Error analyzing exercise:', error);
+        // Fallback to basic estimation
+        return {
+          calories: 50, // Basic fallback: 50 calories
+          category: 'general',
+          enhancedDescription: description,
+          proteinGrams: null
+        };
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    const selectedExerciseData = [...exerciseCategories.cardio, ...exerciseCategories.bodyweight, ...exerciseCategories.weights]
-      .find(ex => ex.name === selectedExercise);
+    const handleAddExercise = async () => {
+      if (!exerciseDescription.trim()) return;
+      
+      const exerciseData = await getExerciseDataFromAI(exerciseDescription);
+      
+      // Use new API endpoint directly (bypassing old addActivity function)
+      try {
+        const response = await fetch('/api/workout/activities', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'exercise',
+            description: exerciseData.enhancedDescription,
+            category: exerciseData.category,
+            calories: exerciseData.calories,
+            protein_grams: null // Exercise doesn't have protein
+          })
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          // Refresh today's data
+          await loadTodayData();
+          setLastLookup(`${exerciseDescription} = +${exerciseData.calories} calories`);
+        } else {
+          console.error('Failed to save exercise');
+        }
+      } catch (error) {
+        console.error('Error saving exercise:', error);
+        setLastLookup(`Error saving: ${exerciseDescription}`);
+      }
+      setExerciseDescription('');
+    };
+
+    const handleKeyPress = (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && !isLoading && exerciseDescription.trim()) {
+        handleAddExercise();
+      }
+    };
 
     return (
       <div className="bg-green-900/30 rounded-lg p-4 border border-green-500/50">
         <h3 className="font-semibold text-green-400 mb-3">💪 Add Exercise (Income)</h3>
         <div className="space-y-3">
-          {/* Exercise Category Selection */}
           <div>
-            <select
-              value={selectedExercise}
-              onChange={(e) => {
-                setSelectedExercise(e.target.value);
-                setExerciseParams({});
-              }}
-              className="w-full border border-gray-600 bg-gray-700 text-white rounded-lg px-3 py-2 focus:border-green-400 focus:ring-2 focus:ring-green-400/50"
-            >
-              <option value="">Select exercise...</option>
-              
-              <optgroup label="🏃 Cardio (Weight-Based)">
-                {exerciseCategories.cardio.map(exercise => (
-                  <option key={exercise.name} value={exercise.name}>{exercise.name}</option>
-                ))}
-              </optgroup>
-              
-              <optgroup label="💪 Bodyweight (Weight-Based)">
-                {exerciseCategories.bodyweight.map(exercise => (
-                  <option key={exercise.name} value={exercise.name}>{exercise.name}</option>
-                ))}
-              </optgroup>
-              
-              <optgroup label="🏋️ With Weights">
-                {exerciseCategories.weights.map(exercise => (
-                  <option key={exercise.name} value={exercise.name}>{exercise.name}</option>
-                ))}
-              </optgroup>
-            </select>
+            <input
+              type="text"
+              placeholder="Describe your workout (e.g., 'bench press 3 sets heavy', 'ran 5km', 'pushups till failure')..."
+              value={exerciseDescription}
+              onChange={(e) => setExerciseDescription(e.target.value)}
+              onKeyPress={handleKeyPress}
+              className="w-full border border-gray-600 bg-gray-700 text-white rounded-lg px-3 py-2 focus:border-green-400 focus:ring-2 focus:ring-green-400/50 placeholder-gray-400"
+              disabled={isLoading}
+            />
           </div>
           
-          {/* Dynamic Parameter Inputs */}
-          {selectedExerciseData && (
-            <div className="space-y-2">
-              <div className="text-xs text-green-400 mb-2">
-                Your weight: {currentWeight}kg (used for calculation)
-              </div>
-              {selectedExerciseData.params.map((param, index) => (
-                <div key={param} className="flex gap-2 items-center">
-                  <input
-                    type="number"
-                    min="0"
-                    step={param === 'distance' ? '0.1' : '1'}
-                    placeholder={`Enter ${param}`}
-                    value={exerciseParams[param] || ''}
-                    onChange={(e) => setExerciseParams((prev: any) => ({
-                      ...prev,
-                      [param]: Number(e.target.value)
-                    }))}
-                    className="flex-1 border border-gray-600 bg-gray-700 text-white rounded-lg px-3 py-2 focus:border-green-400 focus:ring-2 focus:ring-green-400/50 placeholder-gray-400"
-                  />
-                  <span className="text-sm text-gray-300 min-w-fit">
-                    {selectedExerciseData.units[index]}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="text-xs text-green-400 mb-2">
+            Your weight: {currentWeight}kg (AI uses this for accurate calculations)
+          </div>
           
           <button
             onClick={handleAddExercise}
-            disabled={!selectedExercise || !selectedExerciseData?.params.every(param => exerciseParams[param] > 0)}
-            className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-500 disabled:bg-gray-600 transition-colors"
+            disabled={!exerciseDescription.trim() || isLoading}
+            className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-500 disabled:bg-gray-600 transition-colors flex items-center justify-center gap-2"
           >
-            Add Exercise
+            {isLoading ? (
+              <>
+                <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                AI Analyzing...
+              </>
+            ) : (
+              'Add Exercise'
+            )}
           </button>
 
-          {selectedExercise && (
-            <div className="text-xs text-gray-400">
-              {selectedExercise === 'running' && '💡 Formula: Weight × Distance (1 cal/kg/km standard)'}
-              {selectedExercise === 'skipping' && '💡 Formula: Time × Weight × 0.12 (12 cal/min/kg)'}
-              {selectedExercise === 'walking' && '💡 Formula: Steps × Weight × 0.0004 (0.04 cal/step/kg)'}
-              {(selectedExercise === 'pushups' || selectedExercise === 'squats' || selectedExercise === 'crunches') && 
-                '💡 Formula: Reps × Your Weight × Small Factor'}
-              {(selectedExercise === 'bench press' || selectedExercise === 'deadlifts' || selectedExercise === 'squats with weight') && 
-                '💡 Formula: Weight × Reps × Small Factor'}
+          {lastLookup && (
+            <div className="text-xs text-gray-400 bg-gray-800 rounded px-2 py-1">
+              Last: {lastLookup}
             </div>
           )}
+
+          <div className="text-xs text-gray-400">
+            💡 Just describe naturally! AI understands "bench press 3 heavy sets", "ran 5km moderate", "100 pushups", etc.
+          </div>
         </div>
       </div>
     );
@@ -587,12 +717,9 @@ export default function WorkoutPage() {
         <div className="bg-gray-800/60 rounded-lg p-6 mb-8">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <h1 className="text-4xl font-bold text-white mb-2">
-                💪 Workout & Weight Loss Tracker
-              </h1>
-              <p className="text-gray-300">
-                Science-based approach to achieve your fitness goals
-              </p>
+              <h3 className="text-4xl font-bold text-white mb-2">
+                💪 Calorie Tracker
+              </h3>
             </div>
             
             <div className="flex items-center space-x-3">
@@ -614,35 +741,76 @@ export default function WorkoutPage() {
             </div>
           </div>
 
-          {/* User Profile Display */}
-          {userProfile && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-purple-600/40 p-3 rounded-lg border border-purple-400/30">
-                <div className="text-purple-300 text-sm">Weekly Goal</div>
-                <div className="text-2xl font-bold text-purple-100">{userProfile.weeklyGoal}</div>
-                <div className="text-purple-300 text-xs">kg/week Goal</div>
+          {/* Current Weight Input - With Controls */}
+          <div className="bg-purple-900/30 rounded-lg p-4 mb-6 border border-purple-500/50">
+            <div className="flex items-center justify-center gap-4">
+              <label className="text-purple-300 font-medium">Current Weight:</label>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const newWeight = Math.max(30, currentWeight - 0.1);
+                    setCurrentWeight(newWeight);
+                    setUserStats(prev => ({ ...prev, currentWeight: newWeight }));
+                  }}
+                  className="bg-purple-600 hover:bg-purple-700 text-white w-8 h-8 rounded-lg text-sm font-bold"
+                >
+                  -
+                </button>
+                <input
+                  type="number"
+                  value={currentWeight}
+                  onChange={(e) => {
+                    const newWeight = Number(e.target.value);
+                    setCurrentWeight(newWeight);
+                    setUserStats(prev => ({ ...prev, currentWeight: newWeight }));
+                  }}
+                  className="border border-purple-500/50 bg-gray-700 text-white rounded-lg px-4 py-2 text-lg font-semibold w-24 text-center focus:border-purple-400 focus:ring-2 focus:ring-purple-400/50"
+                  step="0.1"
+                  min="30"
+                  max="200"
+                />
+                <button
+                  onClick={() => {
+                    const newWeight = Math.min(200, currentWeight + 0.1);
+                    setCurrentWeight(newWeight);
+                    setUserStats(prev => ({ ...prev, currentWeight: newWeight }));
+                  }}
+                  className="bg-purple-600 hover:bg-purple-700 text-white w-8 h-8 rounded-lg text-sm font-bold"
+                >
+                  +
+                </button>
+                <span className="text-lg text-purple-300 font-medium">kg</span>
+                <button
+                  onClick={handleSaveCurrentWeight}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium ml-2"
+                >
+                  💾 Save
+                </button>
               </div>
-
-              <div className="bg-yellow-600/40 p-3 rounded-lg border border-yellow-400/30">
-                <div className="text-yellow-300 text-sm">Time to Goal</div>
-                <div className="text-2xl font-bold text-yellow-100">{userProfile.monthsToGoal}</div>
-                <div className="text-yellow-300 text-xs">Months to Goal</div>
-                <div className="text-yellow-300/70 text-xs">Auto-calculated</div>
-              </div>
-
-              <div className="bg-gray-600/40 p-3 rounded-lg border border-gray-400/30">
-                <div className="text-gray-300 text-sm">Current Weight</div>
-                <div className="text-2xl font-bold text-gray-100">{userProfile.currentWeight}</div>
-                <div className="text-gray-300 text-xs">kg</div>
-              </div>
-
-              <div className="bg-green-600/40 p-3 rounded-lg border border-green-400/30">
-                <div className="text-green-300 text-sm">Age</div>
-                <div className="text-2xl font-bold text-green-100">{userProfile.age}</div>
-                <div className="text-green-300 text-xs">Years Old</div>
+              <div className="text-sm text-purple-400">
+                Click Save to update your profile permanently
               </div>
             </div>
-          )}
+          </div>
+
+          {/* Today's Balance - Moved to Top */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+            <div className="bg-blue-900/50 rounded-lg p-4 text-center border border-blue-500/50">
+              <div className="text-3xl font-bold text-blue-400">{Math.round(todayRemainingToEat || 0)}</div>
+              <div className="text-sm text-gray-300">💵 Balance (Can Eat)</div>
+              <div className="text-xs text-gray-400">Target: {Math.round(targetDailyCalories || 0)} - Food: {todayCaloriesFromFood || 0}</div>
+            </div>
+            <div className="bg-green-900/50 rounded-lg p-4 text-center border border-green-500/50">
+              <div className="text-2xl font-bold text-green-400">+{todayCaloriesFromExercise || 0}</div>
+              <div className="text-sm text-gray-300">💪 Exercise Earned</div>
+              <div className="text-xs text-gray-400">Bonus calories from workouts</div>
+            </div>
+            <div className="bg-red-900/50 rounded-lg p-4 text-center border border-red-500/50">
+              <div className="text-2xl font-bold text-red-400">-{todayCaloriesFromFood || 0}</div>
+              <div className="text-sm text-gray-300">🍽️ Food Spent</div>
+              <div className="text-xs text-gray-400">Calories consumed today</div>
+            </div>
+          </div>
         </div>
 
         {/* System Status Banner */}
@@ -669,67 +837,20 @@ export default function WorkoutPage() {
             </div>
         )}
 
-        {/* Current Weight Update */}
-        <div className="bg-gray-800 rounded-xl shadow-lg p-6 mb-6 border border-gray-700">
-          <h2 className="text-2xl font-semibold text-white mb-4">⚖️ Weight Settings</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="flex items-center gap-4">
-              <label className="text-lg font-semibold text-gray-300 min-w-fit">Current Weight:</label>
-              <input
-                type="number"
-                value={currentWeight}
-                onChange={(e) => handleWeightUpdate(Number(e.target.value))}
-                className="border border-gray-600 bg-gray-700 text-white rounded-lg px-4 py-2 text-lg font-semibold w-32 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/50"
-                step="0.1"
-              />
-              <span className="text-lg text-gray-300">kg</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <label className="text-lg font-semibold text-gray-300 min-w-fit">Target Weight:</label>
-              <input
-                type="number"
-                value={userStats.targetWeight}
-                onChange={(e) => updateTargetWeight(Number(e.target.value))}
-                className="border border-red-500/50 bg-gray-700 text-white rounded-lg px-4 py-2 text-lg font-semibold w-32 focus:border-red-400 focus:ring-2 focus:ring-red-400/50"
-                step="0.1"
-              />
-              <span className="text-lg text-gray-300">kg</span>
-            </div>
-          </div>
-        </div>
+
+
+
 
         {/* Daily Tracker - Money Balance Style */}
         <div className="bg-gray-800 rounded-xl shadow-lg p-6 mb-6 border border-gray-700">
           <h2 className="text-2xl font-semibold text-white mb-4">💰 Today's Calorie Balance (Money Style)</h2>
           
-          {/* Balance Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-blue-900/50 rounded-lg p-4 text-center border border-blue-500/50">
-              <div className="text-3xl font-bold text-blue-400">{todayRemainingToEat}</div>
-              <div className="text-sm text-gray-300">💵 Balance (Can Eat)</div>
-              <div className="text-xs text-gray-400">Target: {targetDailyCalories} - Food: {todayCaloriesFromFood}</div>
-            </div>
-            <div className="bg-green-900/50 rounded-lg p-4 text-center border border-green-500/50">
-              <div className="text-2xl font-bold text-green-400">+{todayCaloriesFromExercise}</div>
-              <div className="text-sm text-gray-300">💪 Exercise Earned</div>
-              <div className="text-xs text-gray-400">Bonus calories from workouts</div>
-            </div>
-            <div className="bg-red-900/50 rounded-lg p-4 text-center border border-red-500/50">
-              <div className="text-2xl font-bold text-red-400">-{todayCaloriesFromFood}</div>
-              <div className="text-sm text-gray-300">🍽️ Food Spent</div>
-              <div className="text-xs text-gray-400">Calories consumed today</div>
-            </div>
-            <div className="bg-purple-900/50 rounded-lg p-4 text-center border border-purple-500/50">
-              <div className="text-2xl font-bold text-purple-400">{todayActualDeficit}</div>
-              <div className="text-sm text-gray-300">🎯 Today's Deficit</div>
-              <div className="text-xs text-gray-400">Actual deficit created</div>
-            </div>
-          </div>
+
 
           {/* Quick Add Buttons */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <QuickFoodAdd addActivity={addActivity} />
-            <QuickExerciseAdd addActivity={addActivity} calculateExerciseCalories={calculateExerciseCalories} currentWeight={currentWeight} />
+            <QuickExerciseAdd addActivity={addActivity} currentWeight={currentWeight} />
           </div>
 
           {/* Today's Activity Log */}
@@ -745,20 +866,22 @@ export default function WorkoutPage() {
                   }`}>
                     <div className="flex-1">
                       <div className="font-medium text-white">
-                        {activity.type === 'food' ? '🍽️' : '💪'} {activity.name}
+                        {activity.type === 'food' ? '🍽️' : '💪'} {activity.description || activity.name || 'No description'}
                       </div>
-                      <div className="text-sm text-gray-300">{activity.details}</div>
+                      <div className="text-sm text-gray-300">{activity.category || activity.details || ''}</div>
                       <div className="text-xs text-gray-400">
-                        {activity.timestamp ? 
-                          new Date(activity.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) :
-                          'Just now'
+                        {activity.created_at ? 
+                          new Date(activity.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) :
+                          activity.timestamp ? 
+                            new Date(activity.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) :
+                            'Just now'
                         }
                       </div>
                     </div>
                     <div className={`font-bold text-lg ${
                       activity.type === 'food' ? 'text-red-400' : 'text-green-400'
                     }`}>
-                      {activity.type === 'food' ? '-' : '+'}{Math.abs(activity.calories)}
+                      {activity.type === 'food' ? '-' : '+'}{Math.abs(activity.calories || 0)}
                     </div>
                     <button
                       onClick={() => activity.id && handleDeleteActivity(activity.id)}
@@ -777,11 +900,20 @@ export default function WorkoutPage() {
         <div className="bg-gray-800 rounded-xl shadow-lg p-6 mb-6 border border-gray-700">
           <div className="p-4 bg-gradient-to-r from-yellow-900/30 to-orange-900/30 rounded-lg border border-yellow-500/50">
             <h3 className="font-bold text-orange-400 mb-4 text-xl">🔗 The Simple Truth:</h3>
-            <div className="text-sm text-gray-300 space-y-2">
-              <p><strong>Step 1:</strong> Your body burns <span className="font-semibold text-blue-400">{Math.round(bmr)} calories</span> just to survive</p>
-              <p><strong>Step 2:</strong> With sedentary lifestyle, you burn <span className="font-semibold text-green-400">{Math.round(maintenanceCalories)} calories</span> per day</p>
-              <p><strong>Step 3:</strong> To lose {userStats.weeklyWeightLoss}kg per week, you need <span className="font-semibold text-orange-400">{Math.round(weeklyCalorieDeficit)} calories</span> deficit per week</p>
-              <p><strong>Step 4:</strong> So eat <span className="font-semibold text-red-400">{Math.round(targetDailyCalories)} calories</span> per day ({Math.round(maintenanceCalories)} - {Math.round(dailyCalorieDeficit)} = {Math.round(targetDailyCalories)})</p>
+            <div className="text-sm text-gray-300 space-y-3">
+              <p className="bg-purple-900/30 p-2 rounded border-l-4 border-purple-400">
+                <strong>Current Weight:</strong> Since your current weight is <span className="font-semibold text-purple-400">{currentWeight || 0} kg</span>, all calculations are based on this weight
+              </p>
+              
+              <p><strong>Step 1:</strong> Your body burns <span className="font-semibold text-blue-400">{Math.round(bmr)} calories</span> just to survive (BMR calculation)</p>
+              
+              <p><strong>Step 2:</strong> With sedentary lifestyle, you burn <span className="font-semibold text-green-400">{Math.round(maintenanceCalories)} calories</span> per day (BMR × 1.2)</p>
+              
+              <p><strong>Step 3:</strong> To lose <span className="font-semibold text-yellow-400">{userStats.weeklyWeightLoss}kg</span> per week, you need <span className="font-semibold text-orange-400">{Math.round(weeklyCalorieDeficit)} calories</span> deficit per week</p>
+              
+              <p><strong>Step 4:</strong> Daily deficit needed: <span className="font-semibold text-pink-400">{Math.round(dailyCalorieDeficit)} calories</span> per day ({Math.round(weeklyCalorieDeficit)} ÷ 7 = {Math.round(dailyCalorieDeficit)})</p>
+              
+              <p><strong>Step 5:</strong> So eat <span className="font-semibold text-red-400">{Math.round(targetDailyCalories)} calories</span> per day ({Math.round(maintenanceCalories)} - {Math.round(dailyCalorieDeficit)} = {Math.round(targetDailyCalories)})</p>
             </div>
             
             <div className="mt-4 p-3 bg-green-900/30 rounded-lg border-l-4 border-green-500">
@@ -791,67 +923,18 @@ export default function WorkoutPage() {
                 This means you can either eat more food or lose weight faster than planned!
               </p>
             </div>
-          </div>
-        </div>
-
-        {/* Progress Overview */}
-        <div className="bg-gray-800 rounded-xl shadow-lg p-6 mb-6 border border-gray-700">
-          <h2 className="text-2xl font-semibold text-white mb-4">📊 Progress Overview</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center">
-              <div className="text-4xl font-bold text-purple-400">{totalWeightLoss.toFixed(1)} kg</div>
-              <div className="text-sm text-gray-300">Total Weight to Lose</div>
-              <div className="text-xs text-gray-400">{currentWeight}kg → {userStats.targetWeight}kg</div>
-            </div>
-            <div className="text-center">
-              <div className="text-4xl font-bold text-green-400">{weightLostSoFar.toFixed(1)} kg</div>
-              <div className="text-sm text-gray-300">Weight Lost So Far</div>
-              <div className="text-xs text-gray-400">Update current weight to track</div>
-            </div>
-            <div className="text-center">
-              <div className="text-4xl font-bold text-blue-400">{progressPercentage.toFixed(1)}%</div>
-              <div className="text-sm text-gray-300">Progress Completed</div>
-              <div className="text-xs text-gray-400">{Math.max(0, weeksNeeded - (weightLostSoFar / userStats.weeklyWeightLoss)).toFixed(1)} weeks remaining</div>
-            </div>
-          </div>
-          
-          {/* Progress Bar */}
-          <div className="mt-6">
-            <div className="w-full bg-gray-600 rounded-full h-4">
-              <div
-                className="bg-gradient-to-r from-green-400 to-blue-500 h-4 rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(progressPercentage, 100)}%` }}
-              ></div>
+            
+            <div className="mt-4 p-3 bg-blue-900/30 rounded-lg border-l-4 border-blue-500">
+              <h4 className="font-bold text-blue-400 mb-2">⚖️ Weight Changes = New Calculations!</h4>
+              <p className="text-sm text-gray-300">
+                As your weight changes, your BMR changes too. When you lose weight, you'll need fewer calories to maintain, 
+                so your target calories will automatically adjust based on your current weight of {currentWeight}kg.
+              </p>
             </div>
           </div>
         </div>
 
 
-
-        {/* Analytics Section */}
-        {analytics && (
-          <div className="bg-gray-800 rounded-xl shadow-lg p-6 mb-6 border border-gray-700">
-            <h2 className="text-2xl font-semibold text-white mb-4">📊 7-Day Analytics</h2>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-gradient-to-br from-blue-900/50 to-blue-800/50 rounded-lg p-4 border border-blue-500/50">
-                <div className="text-2xl font-bold text-blue-400">{analytics.totalDays}</div>
-                <div className="text-sm text-gray-300">Days Tracked</div>
-              </div>
-              <div className="bg-gradient-to-br from-red-900/50 to-red-800/50 rounded-lg p-4 border border-red-500/50">
-                <div className="text-2xl font-bold text-red-400">{analytics.deficit}</div>
-                <div className="text-sm text-gray-300">Total Deficit (cal)</div>
-              </div>
-              <div className="bg-gradient-to-br from-green-900/50 to-green-800/50 rounded-lg p-4 border border-green-500/50">
-                <div className="text-2xl font-bold text-green-400">{analytics.predictedWeightLoss}kg</div>
-                <div className="text-sm text-gray-300">Predicted Weight Loss</div>
-              </div>
-              <div className="bg-gradient-to-br from-purple-900/50 to-purple-800/50 rounded-lg p-4 border border-purple-500/50">
-                <div className="text-2xl font-bold text-purple-400">{analytics.weeklyAverage}</div>
-                <div className="text-sm text-gray-300">Weekly Avg Deficit</div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Floating Chat Button */}

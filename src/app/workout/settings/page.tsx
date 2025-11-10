@@ -9,7 +9,6 @@ export default function WorkoutSettingsPage() {
   const [formData, setFormData] = useState({
     dateOfBirth: '',
     height: '',
-    currentWeight: '',
     targetWeight: '',
     weeklyGoal: '0.5'
   });
@@ -29,7 +28,6 @@ export default function WorkoutSettingsPage() {
     setFormData({
       dateOfBirth: currentUser.dateOfBirth,
       height: currentUser.height.toString(),
-      currentWeight: currentUser.currentWeight.toString(),
       targetWeight: currentUser.targetWeight.toString(),
       weeklyGoal: currentUser.weeklyGoal.toString()
     });
@@ -47,11 +45,13 @@ export default function WorkoutSettingsPage() {
     setFormData(newFormData);
     setMessage('');
 
-    // Update profile preview in real-time
-    if (newFormData.dateOfBirth && newFormData.currentWeight && newFormData.targetWeight && newFormData.weeklyGoal) {
+    // Update profile preview in real-time (excluding current weight - managed on home page)
+    if (newFormData.dateOfBirth && newFormData.targetWeight && newFormData.weeklyGoal) {
       const age = calculateAge(newFormData.dateOfBirth);
+      // Use existing current weight for calculation since we don't manage it here
+      const currentWeight = profile?.currentWeight || user?.currentWeight || 86;
       const monthsToGoal = calculateMonthsToGoal(
-        parseFloat(newFormData.currentWeight),
+        currentWeight,
         parseFloat(newFormData.targetWeight),
         parseFloat(newFormData.weeklyGoal)
       );
@@ -60,7 +60,6 @@ export default function WorkoutSettingsPage() {
         ...profile,
         age,
         height: parseFloat(newFormData.height),
-        currentWeight: parseFloat(newFormData.currentWeight),
         targetWeight: parseFloat(newFormData.targetWeight),
         weeklyGoal: parseFloat(newFormData.weeklyGoal),
         monthsToGoal
@@ -77,7 +76,6 @@ export default function WorkoutSettingsPage() {
       const updates = {
         dateOfBirth: formData.dateOfBirth,
         height: parseFloat(formData.height),
-        currentWeight: parseFloat(formData.currentWeight),
         targetWeight: parseFloat(formData.targetWeight),
         weeklyGoal: parseFloat(formData.weeklyGoal)
       };
@@ -180,40 +178,21 @@ export default function WorkoutSettingsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Current Weight (kg)
-                  </label>
-                  <input
-                    type="number"
-                    name="currentWeight"
-                    value={formData.currentWeight}
-                    onChange={handleInputChange}
-                    required
-                    step="0.1"
-                    min="30"
-                    max="300"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Target Weight (kg)
-                  </label>
-                  <input
-                    type="number"
-                    name="targetWeight"
-                    value={formData.targetWeight}
-                    onChange={handleInputChange}
-                    required
-                    step="0.1"
-                    min="30"
-                    max="300"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Target Weight (kg)
+                </label>
+                <input
+                  type="number"
+                  name="targetWeight"
+                  value={formData.targetWeight}
+                  onChange={handleInputChange}
+                  required
+                  step="0.1"
+                  min="30"
+                  max="300"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
 
               <div>
@@ -277,10 +256,11 @@ export default function WorkoutSettingsPage() {
 
                 <div className="bg-gray-50 p-4 rounded-lg border-l-4 border-gray-400">
                   <h3 className="text-sm font-semibold text-gray-800 mb-2">⚖️ Weight Settings</h3>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-gray-600">Current Weight:</p>
-                      <p className="font-bold text-gray-800">{profile.currentWeight} kg</p>
+                  <div className="space-y-3 text-sm">
+                    <div className="bg-blue-100 p-3 rounded border-l-4 border-blue-400">
+                      <p className="text-blue-600 font-medium">Current Weight:</p>
+                      <p className="text-blue-800 text-xs">Managed on Home Page</p>
+                      <p className="text-blue-700 text-xs">Change your weight directly on the workout page for real-time calculations</p>
                     </div>
                     <div>
                       <p className="text-gray-600">Target Weight:</p>

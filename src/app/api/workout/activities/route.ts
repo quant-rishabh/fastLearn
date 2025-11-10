@@ -1,54 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/utils/supabase';
 
-// Save activity (food or exercise)
+// Save activity (food or exercise) - NEW SCHEMA
 export async function POST(request: NextRequest) {
   try {
     const { 
-      userId, 
-      type, 
-      name, 
-      details, 
-      calories, 
-      category, 
-      parameters,
-      aiCalculated = false,
-      date = new Date().toISOString().split('T')[0],
-      bmr,
-      maintenance,
-      targetCalories
+      type,           // 'food' or 'exercise'
+      description,    // AI-analyzed description with calories
+      category,       // AI-determined category
+      calories,       // AI-calculated calories (always positive)
+      protein_grams,  // For food items only
+      date = new Date().toISOString().split('T')[0]
     } = await request.json();
 
-    // Get or create daily tracking record
-    const { data: trackingData, error: trackingError } = await supabase
-      .rpc('get_or_create_daily_tracking', {
-        p_user_id: userId,
-        p_date: date,
-        p_bmr: bmr,
-        p_maintenance: maintenance,
-        p_target: targetCalories
-      });
-
-    if (trackingError) {
-      console.error('Error creating daily tracking:', trackingError);
-      return NextResponse.json({ error: 'Failed to create daily tracking' }, { status: 500 });
+    // Validate required fields
+    if (!type || !description || !category || !calories) {
+      return NextResponse.json({ 
+        error: 'Missing required fields: type, description, category, calories' 
+      }, { status: 400 });
     }
 
-    const dailyTrackingId = trackingData;
-
-    // Insert the activity
+    // Insert the activity using new optimized schema
     const { data: activity, error: activityError } = await supabase
       .from('activities')
       .insert({
-        user_id: userId,
-        daily_tracking_id: dailyTrackingId,
-        type: type,
-        name: name,
-        details: details,
-        calories: calories,
-        category: category,
-        parameters: parameters,
-        ai_calculated: aiCalculated
+        date,
+        type,
+        description,
+        category, 
+        calories: Math.abs(calories), // Ensure positive
+        protein_grams: type === 'food' ? protein_grams : null
       })
       .select()
       .single();
@@ -58,16 +39,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to save activity' }, { status: 500 });
     }
 
-    // Get updated daily tracking with totals
-    const { data: updatedTracking, error: fetchError } = await supabase
-      .from('daily_tracking')
-      .select('*')
-      .eq('id', dailyTrackingId)
-      .single();
+    // Get updated daily totals using optimized function (single query!)
+    const { data: todayData, error: fetchError } = await supabase
+      .rpc('get_today_complete_data');
+
+    if (fetchError) {
+      console.error('Error fetching updated data:', fetchError);
+      return NextResponse.json({ error: 'Failed to fetch updated data' }, { status: 500 });
+    }
 
     return NextResponse.json({ 
       activity, 
-      dailyTracking: updatedTracking,
+      todayData: todayData,
       success: true 
     });
 
@@ -77,57 +60,52 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Get activities for a specific date
+// Get activities for a specific date - NEW OPTIMIZED SCHEMA
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
     const date = searchParams.get('date') || new Date().toISOString().split('T')[0];
 
-    if (!userId) {
-      return NextResponse.json({ error: 'User ID required' }, { status: 400 });
-    }
+    if (date === 'today') {
+      // Use super-optimized single query for today's data
+      const { data: todayData, error } = await supabase
+        .rpc('get_today_complete_data');
+      
+      if (error) {
+        console.error('Error fetching today data:', error);
+        return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 });
+      }
 
-    // Get daily tracking and activities
-    const { data: dailyTracking, error: trackingError } = await supabase
-      .from('daily_tracking')
-      .select(`
-        *,
-        activities (
-          id,
-          type,
-          name,
-          details,
-          calories,
-          category,
-          parameters,
-          ai_calculated,
-          timestamp
-        )
-      `)
-      .eq('user_id', userId)
-      .eq('date', date)
-      .single();
-
-    if (trackingError && trackingError.code !== 'PGRST116') {
-      console.error('Error fetching daily tracking:', trackingError);
-      return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 });
-    }
-
-    // If no tracking record exists, return empty state
-    if (!dailyTracking) {
       return NextResponse.json({
-        dailyTracking: null,
-        activities: [],
+        todayData: todayData,
+        success: true
+      });
+    } else {
+      // Get specific date data
+      const { data: activities, error: activitiesError } = await supabase
+        .from('activities')
+        .select('*')
+        .eq('date', date)
+        .order('created_at', { ascending: false });
+
+      if (activitiesError) {
+        console.error('Error fetching activities:', activitiesError);
+        return NextResponse.json({ error: 'Failed to fetch activities' }, { status: 500 });
+      }
+
+      // Get daily totals for that specific date
+      const { data: dailyTotals, error: totalsError } = await supabase
+        .from('daily_totals')
+        .select('*')
+        .eq('date', date)
+        .single();
+
+      return NextResponse.json({
+        activities: activities || [],
+        dailyTotals: dailyTotals || null,
         success: true
       });
     }
-
-    return NextResponse.json({
-      dailyTracking,
-      activities: dailyTracking.activities || [],
-      success: true
-    });
 
   } catch (error) {
     console.error('Error in get activities API:', error);
@@ -135,7 +113,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Delete activity
+// Delete activity - OPTIMIZED
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -145,6 +123,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Activity ID required' }, { status: 400 });
     }
 
+    // Delete the activity
     const { error } = await supabase
       .from('activities')
       .delete()
@@ -155,7 +134,20 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to delete activity' }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true });
+    // Return updated today's data in one query
+    const { data: todayData, error: fetchError } = await supabase
+      .rpc('get_today_complete_data');
+
+    if (fetchError) {
+      console.error('Error fetching updated data:', fetchError);
+      // Don't fail the delete, just return success
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      todayData: todayData 
+    });
 
   } catch (error) {
     console.error('Error in delete activity API:', error);

@@ -107,16 +107,16 @@ export default function WorkoutLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-black-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-black-100">
             🏋️‍♀️ Workout Tracker
           </h2>
-          <h3 className="mt-2 text-center text-xl font-bold text-gray-800">
+          <h3 className="mt-2 text-center text-xl font-bold text-black-800">
             {isLogin ? 'Sign in to your account' : 'Create your account'}
           </h3>
-          <p className="mt-2 text-center text-sm text-gray-600">
+          <p className="mt-2 text-center text-sm text-black-600">
             {isLogin ? "Don't have an account? " : 'Already have an account? '}
             <button
               onClick={() => {
@@ -139,7 +139,7 @@ export default function WorkoutLoginPage() {
 
           <div className="space-y-4">
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="username" className="block text-sm font-medium text-black-700">
                 Username
               </label>
               <input
@@ -155,7 +155,7 @@ export default function WorkoutLoginPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="block text-sm font-medium text-black-700">
                 Password
               </label>
               <input
@@ -173,7 +173,7 @@ export default function WorkoutLoginPage() {
             {!isLogin && (
               <>
                 <div>
-                  <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="dateOfBirth" className="block text-sm font-medium text-black-700">
                     Date of Birth
                   </label>
                   <input
@@ -189,7 +189,7 @@ export default function WorkoutLoginPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="height" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="height" className="block text-sm font-medium text-black-700">
                       Height (cm)
                     </label>
                     <input
@@ -205,7 +205,7 @@ export default function WorkoutLoginPage() {
                   </div>
 
                   <div>
-                    <label htmlFor="currentWeight" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="currentWeight" className="block text-sm font-medium text-black-700">
                       Current Weight (kg)
                     </label>
                     <input
@@ -224,7 +224,7 @@ export default function WorkoutLoginPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="targetWeight" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="targetWeight" className="block text-sm font-medium text-black-700">
                       Target Weight (kg)
                     </label>
                     <input
@@ -241,7 +241,7 @@ export default function WorkoutLoginPage() {
                   </div>
 
                   <div>
-                    <label htmlFor="weeklyGoal" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="weeklyGoal" className="block text-sm font-medium text-black-700">
                       Weekly Goal (kg/week)
                     </label>
                     <select
@@ -276,7 +276,7 @@ export default function WorkoutLoginPage() {
               <button
                 type="button"
                 onClick={createDemoAccount}
-                className="w-full flex justify-center py-2 px-4 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="w-full flex justify-center py-2 px-4 border border-gray-300 text-sm font-medium rounded-md text-black-100 bg-black hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
                 🚀 Try Demo Account
               </button>
@@ -301,7 +301,7 @@ export default function WorkoutLoginPage() {
         <div className="text-center">
           <a
             href="/"
-            className="text-sm text-gray-500 hover:text-gray-700 underline"
+            className="text-sm text-black-500 hover:text-black-700 underline"
           >
             ← Back to LearnFast App
           </a>

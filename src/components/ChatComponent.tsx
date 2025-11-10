@@ -139,6 +139,29 @@ export default function ChatComponent({ isOpen, onClose }: ChatComponentProps) {
               <h4 className="text-lg font-semibold mb-2">Welcome to your Fitness Coach!</h4>
               <p className="text-sm mb-4">Ask me anything about your workout, nutrition, or progress.</p>
               
+              {/* Predefined Quick Questions */}
+              <div className="grid grid-cols-1 gap-2 mb-4">
+                <h5 className="text-xs font-semibold text-gray-300 mb-2">💡 Quick Questions:</h5>
+                {[
+                  { text: "How many calories do I have left today?", type: "progress" },
+                  { text: "What's my current weight loss progress?", type: "progress" },
+                  { text: "What exercises burn the most calories?", type: "workout" },
+                  { text: "What should I eat to reach my protein goal?", type: "nutrition" },
+                  { text: "How can I stay motivated?", type: "general" }
+                ].map((question, index) => (
+                  <button
+                    key={index}
+                    onClick={() => {
+                      setCurrentMessage(question.text);
+                      setMessageType(question.type);
+                    }}
+                    className="text-left text-xs bg-gray-600 hover:bg-gray-500 rounded px-2 py-1 transition-colors"
+                  >
+                    {question.text}
+                  </button>
+                ))}
+              </div>
+              
               {/* Quick Questions */}
               <div className="space-y-2">
                 <p className="text-xs text-gray-500 mb-2">Quick questions:</p>

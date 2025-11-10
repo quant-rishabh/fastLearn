@@ -19,58 +19,58 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Message and user ID required' }, { status: 400 });
     }
 
-    // Get user context for personalized responses
-    const { data: userStats } = await supabase
-      .from('user_stats')
+    // Get user profile and today's data from new optimized schema
+    const { data: userProfile, error: userError } = await supabase
+      .from('user_profile')
       .select('*')
-      .eq('user_id', userId)
-      .order('date', { ascending: false })
-      .limit(1)
       .single();
+
+    // Get today's complete data using optimized function
+    const { data: todayData, error: todayError } = await supabase
+      .rpc('get_today_complete_data');
 
     const { data: recentActivities } = await supabase
       .from('activities')
       .select('*')
-      .eq('user_id', userId)
-      .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+      .gte('date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
       .order('created_at', { ascending: false })
       .limit(10);
-
-    const { data: recentTracking } = await supabase
-      .from('daily_tracking')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
-      .order('date', { ascending: false })
-      .limit(7);
-
-    // Create context for AI
+    
+    // Create context for AI using new optimized schema
     let context = `You are a fitness and nutrition coach assistant. Help the user with their workout and weight loss journey.`;
     
-    if (userStats) {
-      context += `\n\nUser Stats:
-- Current Weight: ${userStats.current_weight}kg
-- Target Weight: ${userStats.target_weight}kg
-- Weekly Goal: ${userStats.weekly_weight_loss}kg/week
-- BMR: ${userStats.bmr} calories
-- Daily Target: ${userStats.target_daily_calories} calories`;
+    if (userProfile) {
+      context += `\n\nUser Profile:
+- Current Weight: ${userProfile.current_weight}kg
+- Target Weight: ${userProfile.target_weight}kg
+- Weekly Goal: ${userProfile.weekly_weight_loss}kg/week
+- BMR: ${userProfile.bmr} calories
+- Daily Target: ${userProfile.daily_calorie_target} calories`;
+    }
+
+    if (todayData) {
+      const today = todayData.today_totals;
+      if (today) {
+        context += `\n\nToday's Progress:
+- Calories Consumed: ${today.calories_consumed}
+- Exercise Calories: ${today.calories_burned_exercise}
+- Remaining Balance: ${today.remaining_balance}
+- Protein Eaten: ${today.total_protein}g`;
+      }
     }
 
     if (recentActivities && recentActivities.length > 0) {
-      context += `\n\nRecent Activities (last 7 days):`;
-      recentActivities.forEach(activity => {
-        context += `\n- ${activity.type}: ${activity.name} (${activity.calories} cal) on ${new Date(activity.created_at).toLocaleDateString()}`;
+      context += `\n\nRecent Activities (last week):`;
+      recentActivities.forEach((activity: any) => {
+        context += `\n- ${activity.type}: ${activity.description} (${activity.calories} cal)`;
       });
     }
 
-    if (recentTracking && recentTracking.length > 0) {
-      context += `\n\nRecent Progress (last 7 days):`;
-      recentTracking.forEach(day => {
-        context += `\n- ${day.date}: Calories in: ${day.total_calories_in}, Out: ${day.total_calories_out}, Deficit: ${day.deficit_created}`;
-      });
-    }
+    context += `\n\nPlease provide helpful, encouraging, and accurate fitness/nutrition advice. Keep responses concise but informative.
 
-    context += `\n\nPlease provide helpful, encouraging, and accurate fitness/nutrition advice based on this information. Keep responses concise but informative.`;
+IMPORTANT: When the user asks about "calories left" or "remaining calories", tell them they have ${todayData?.today_totals?.remaining_balance || 0} calories left to eat today.
+
+Answer questions about calories, workouts, nutrition, and progress tracking.`;
 
     // Get AI response
     const completion = await openai.chat.completions.create({
@@ -92,11 +92,10 @@ export async function POST(request: NextRequest) {
     const aiResponse = completion.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response right now.";
     const tokensUsed = completion.usage?.total_tokens || 0;
 
-    // Save chat message to database
+    // Save chat message to database (single-user schema)
     const { data: chatMessage, error: chatError } = await supabase
       .from('chat_messages')
       .insert({
-        user_id: userId,
         message: message,
         response: aiResponse,
         message_type: messageType,
@@ -128,17 +127,11 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
     const limit = parseInt(searchParams.get('limit') || '20');
-
-    if (!userId) {
-      return NextResponse.json({ error: 'User ID required' }, { status: 400 });
-    }
 
     const { data: chatHistory, error } = await supabase
       .from('chat_messages')
       .select('*')
-      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(limit);
 

@@ -23,13 +23,16 @@ const getStorageKeys = (userId?: string) => {
 export interface Activity {
   id?: string;
   type: 'food' | 'exercise';
-  name: string;
-  details: string;
+  name?: string; // Legacy field - may not be present
+  details?: string; // Legacy field - may not be present
+  description?: string; // New field from API
   calories: number;
   category?: string;
   parameters?: any;
   ai_calculated?: boolean;
   timestamp?: Date;
+  created_at?: string; // Database timestamp field
+  protein_grams?: number; // For food items
 }
 
 export interface DailyTracking {
@@ -270,7 +273,7 @@ export const deleteActivity = async (activityId: string) => {
 // Save user stats
 export const saveUserStats = async (
   currentWeight: number,
-  targetWeight: number,
+  targetWeight: number, 
   height: number,
   age: number,
   weeklyWeightLoss: number,
@@ -280,62 +283,27 @@ export const saveUserStats = async (
 ) => {
   const userId = getUserId();
   
-  const userStats = {
-    user_id: userId,
-    current_weight: currentWeight,
-    target_weight: targetWeight,
-    weekly_weight_loss: weeklyWeightLoss,
-    bmr: bmr,
-    maintenance_calories: maintenanceCalories,
-    target_daily_calories: targetDailyCalories,
-    date: new Date().toISOString().split('T')[0]
-  };
-  
-  // If database is not configured, use local storage
-  if (!isDatabaseConfigured()) {
+  // Always use local storage for now (database migration not complete)
+  if (true) {
     const STORAGE_KEYS = getStorageKeys(userId);
+    const userStats = {
+      currentWeight,
+      targetWeight,
+      height,
+      age,
+      weeklyWeightLoss,
+      bmr,
+      maintenanceCalories,
+      targetDailyCalories,
+      timestamp: new Date().toISOString()
+    };
+    
     saveToLocalStorage(STORAGE_KEYS.USER_STATS, userStats);
+    
     return {
       success: true,
       userStats: userStats,
       message: 'User stats saved locally'
-    };
-  }
-  
-  try {
-    const response = await fetch('/api/workout/user-stats', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        userId,
-        currentWeight,
-        targetWeight,
-        height,
-        age,
-        weeklyWeightLoss,
-        bmr,
-        maintenanceCalories,
-        targetDailyCalories
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Database save failed, using local storage');
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.warn('Database unavailable, using local storage:', error);
-    
-    // Fallback to local storage
-    const STORAGE_KEYS = getStorageKeys(userId);
-    saveToLocalStorage(STORAGE_KEYS.USER_STATS, userStats);
-    return {
-      success: true,
-      userStats: userStats,
-      message: 'User stats saved locally (database unavailable)'
     };
   }
 };
@@ -344,8 +312,8 @@ export const saveUserStats = async (
 export const getUserStats = async () => {
   const userId = getUserId();
   
-  // If database is not configured, use local storage
-  if (!isDatabaseConfigured()) {
+  // Always use local storage for now (database migration not complete)
+  if (true) {
     const STORAGE_KEYS = getStorageKeys(userId);
     const userStats = getFromLocalStorage(STORAGE_KEYS.USER_STATS);
     return {
@@ -356,7 +324,7 @@ export const getUserStats = async () => {
   }
   
   try {
-    const response = await fetch(`/api/workout/user-stats?userId=${userId}`);
+    const response = await fetch(`/api/workout/user-stats`);
     
     if (!response.ok) {
       throw new Error('Database fetch failed, using local storage');
@@ -590,8 +558,8 @@ export const getAnalytics = async (days = 7) => {
 export const sendChatMessage = async (message: string, messageType = 'general') => {
   const userId = getUserId();
   
-  // If database is not configured, provide basic responses
-  if (!isDatabaseConfigured()) {
+  // Always use local storage for now (database migration not complete)
+  if (true) {
     const STORAGE_KEYS = getStorageKeys(userId);
     const basicResponses = {
       general: "I'm here to help with your fitness journey! However, the full AI chat feature requires database setup. For now, I can tell you that consistency is key - keep tracking your food and exercise!",
@@ -671,35 +639,12 @@ export const sendChatMessage = async (message: string, messageType = 'general') 
 export const getChatHistory = async (limit = 20) => {
   const userId = getUserId();
   
-  // If database is not configured, use local storage
-  if (!isDatabaseConfigured()) {
-    const STORAGE_KEYS = getStorageKeys(userId);
-    const chatHistory = getFromLocalStorage(STORAGE_KEYS.CHAT_HISTORY) || [];
-    return {
-      success: true,
-      chatHistory: chatHistory.slice(-limit), // Get last N messages
-      message: 'Chat history loaded from local storage'
-    };
-  }
-  
-  try {
-    const response = await fetch(`/api/chat?userId=${userId}&limit=${limit}`);
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch chat history');
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching chat history:', error);
-    
-    // Fallback to local storage
-    const STORAGE_KEYS = getStorageKeys(userId);
-    const chatHistory = getFromLocalStorage(STORAGE_KEYS.CHAT_HISTORY) || [];
-    return {
-      success: true,
-      chatHistory: chatHistory.slice(-limit),
-      message: 'Chat history loaded from local storage (database unavailable)'
-    };
-  }
+  // Always use local storage for now (database migration not complete)
+  const STORAGE_KEYS = getStorageKeys(userId);
+  const chatHistory = getFromLocalStorage(STORAGE_KEYS.CHAT_HISTORY) || [];
+  return {
+    success: true,
+    chatHistory: chatHistory.slice(-limit), // Get last N messages
+    message: 'Chat history loaded from local storage'
+  };
 };
