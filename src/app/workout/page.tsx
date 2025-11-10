@@ -2,6 +2,20 @@
 
 import { useState, useEffect } from 'react';
 import React from 'react';
+import { useRouter } from 'next/navigation';
+import ChatComponent from '@/components/ChatComponent';
+import { 
+  saveActivity, 
+  getTodayActivities, 
+  deleteActivity, 
+  saveUserStats, 
+  getUserStats,
+  saveWeight,
+  getAnalytics,
+  type Activity,
+  type DailyTracking
+} from '@/utils/workoutDatabase';
+import { isLoggedIn, getCurrentUser, getUserProfile, logoutUser } from '@/utils/auth';
 
 interface UserStats {
   currentWeight: number;
@@ -12,40 +26,54 @@ interface UserStats {
 }
 
 export default function WorkoutPage() {
-  // Calculate age from DOB (21/03/1999)
-  const calculateAge = () => {
-    const birthDate = new Date('1999-03-21');
-    const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    
-    return age;
-  };
+  const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
 
   // Dynamic user stats - can be changed in real-time
   const [userStats, setUserStats] = useState<UserStats>({
     currentWeight: 86,
     targetWeight: 68,
     height: 174,
-    age: calculateAge(), // calculated from DOB 21/03/1999
+    age: 25,
     weeklyWeightLoss: 0.5 // kg per week
   });
 
   const [currentWeight, setCurrentWeight] = useState(86);
 
+  // Check authentication on page load
+  useEffect(() => {
+    if (!isLoggedIn()) {
+      router.push('/workout/login');
+      return;
+    }
+
+    const currentUser = getCurrentUser();
+    const profile = getUserProfile();
+    
+    if (currentUser && profile) {
+      setUser(currentUser);
+      setUserProfile(profile);
+      
+      // Update user stats from profile
+      setUserStats({
+        currentWeight: profile.currentWeight,
+        targetWeight: profile.targetWeight,
+        height: profile.height,
+        age: profile.age,
+        weeklyWeightLoss: profile.weeklyGoal
+      });
+      setCurrentWeight(profile.currentWeight);
+    }
+  }, [router]);
+
   // Daily tracking state
-  const [dailyActivities, setDailyActivities] = useState<Array<{
-    id: string;
-    type: 'food' | 'exercise';
-    name: string;
-    details: string;
-    calories: number;
-    timestamp: Date;
-  }>>([]);
+  const [dailyActivities, setDailyActivities] = useState<Activity[]>([]);
+  const [dailyTracking, setDailyTracking] = useState<DailyTracking | null>(null);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [systemStatus, setSystemStatus] = useState<string>('');
 
   // Exercise formulas
   const calculateExerciseCalories = (exercise: string, params: any, userWeight: number) => {
@@ -117,17 +145,145 @@ export default function WorkoutPage() {
     return (foodDb[food.toLowerCase()] || 0) * quantity;
   };
 
+  // Load data on component mount
+  useEffect(() => {
+    loadTodayData();
+    loadUserStats();
+    loadAnalytics();
+  }, []);
+
+  // Save user stats when they change
+  useEffect(() => {
+    if (!isLoadingData) {
+      handleSaveUserStats();
+    }
+  }, [userStats, currentWeight]);
+
+  const loadTodayData = async () => {
+    try {
+      setIsLoadingData(true);
+      const response = await getTodayActivities();
+      if (response.success) {
+        setDailyActivities(response.activities || []);
+        setDailyTracking(response.dailyTracking);
+        if (response.message) {
+          setSystemStatus(response.message);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading today data:', error);
+      setSystemStatus('Error loading data');
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  const loadUserStats = async () => {
+    try {
+      const response = await getUserStats();
+      if (response.success && response.userStats) {
+        setUserStats(prev => ({
+          ...prev,
+          currentWeight: response.userStats.current_weight,
+          targetWeight: response.userStats.target_weight,
+          weeklyWeightLoss: response.userStats.weekly_weight_loss
+        }));
+        setCurrentWeight(response.userStats.current_weight);
+      }
+    } catch (error) {
+      console.error('Error loading user stats:', error);
+    }
+  };
+
+  const loadAnalytics = async () => {
+    try {
+      const analyticsData = await getAnalytics(7);
+      setAnalytics(analyticsData);
+    } catch (error) {
+      console.error('Error loading analytics:', error);
+    }
+  };
+
+  const handleSaveUserStats = async () => {
+    try {
+      await saveUserStats(
+        currentWeight,
+        userStats.targetWeight,
+        userStats.height,
+        userStats.age,
+        userStats.weeklyWeightLoss,
+        bmr,
+        maintenanceCalories,
+        targetDailyCalories
+      );
+    } catch (error) {
+      console.error('Error saving user stats:', error);
+    }
+  };
+
   // Add activity function
-  const addActivity = (type: 'food' | 'exercise', name: string, details: string, calories: number) => {
-    const newActivity = {
-      id: Date.now().toString(),
-      type,
-      name,
-      details,
-      calories: type === 'food' ? -calories : calories, // Food = negative, Exercise = positive
-      timestamp: new Date()
-    };
-    setDailyActivities(prev => [...prev, newActivity]);
+  const addActivity = async (
+    type: 'food' | 'exercise', 
+    name: string, 
+    details: string, 
+    calories: number, 
+    category?: string, 
+    parameters?: any,
+    aiCalculated?: boolean
+  ) => {
+    try {
+      const activity: Activity = {
+        type,
+        name,
+        details,
+        calories,
+        category,
+        parameters,
+        ai_calculated: aiCalculated
+      };
+
+      const response = await saveActivity(activity, bmr, maintenanceCalories, targetDailyCalories);
+      if (response.success) {
+        // Reload today's data to get updated totals
+        await loadTodayData();
+        await loadAnalytics(); // Refresh analytics too
+      }
+    } catch (error) {
+      console.error('Error adding activity:', error);
+      // Fallback to local state if database fails
+      const newActivity: Activity = {
+        id: Date.now().toString(),
+        type,
+        name,
+        details,
+        calories,
+        category,
+        parameters,
+        timestamp: new Date()
+      };
+      setDailyActivities(prev => [...prev, newActivity]);
+    }
+  };
+
+  const handleDeleteActivity = async (activityId: string) => {
+    try {
+      await deleteActivity(activityId);
+      await loadTodayData();
+      await loadAnalytics();
+    } catch (error) {
+      console.error('Error deleting activity:', error);
+      // Fallback to local deletion
+      setDailyActivities(prev => prev.filter(a => a.id !== activityId));
+    }
+  };
+
+  const handleWeightUpdate = async (newWeight: number) => {
+    setCurrentWeight(newWeight);
+    try {
+      await saveWeight(newWeight);
+    } catch (error) {
+      console.error('Error saving weight:', error);
+    }
   };
 
   // Helper functions to update individual stats
@@ -218,7 +374,7 @@ export default function WorkoutPage() {
       
       const calories = await getCaloriesFromAI(foodDescription);
       
-      addActivity('food', foodDescription, 'AI calculated', calories);
+      await addActivity('food', foodDescription, 'AI calculated', calories, 'ai_food', null, true);
       setLastLookup(`${foodDescription} = ${calories} calories`);
       setFoodDescription('');
     };
@@ -297,7 +453,7 @@ export default function WorkoutPage() {
       ]
     };
 
-    const handleAddExercise = () => {
+    const handleAddExercise = async () => {
       if (selectedExercise) {
         const calories = calculateExerciseCalories(selectedExercise, exerciseParams, currentWeight);
         const selectedEx = [...exerciseCategories.cardio, ...exerciseCategories.bodyweight, ...exerciseCategories.weights]
@@ -307,7 +463,15 @@ export default function WorkoutPage() {
           `${exerciseParams[param] || 0} ${selectedEx.units[index]}`
         ).join(', ') || '';
         
-        addActivity('exercise', selectedExercise, details, calories);
+        // Determine category based on exercise grouping
+        let category = 'bodyweight';
+        if (exerciseCategories.cardio.some(ex => ex.name === selectedExercise)) {
+          category = 'cardio';
+        } else if (exerciseCategories.weights.some(ex => ex.name === selectedExercise)) {
+          category = 'weights';
+        }
+        
+        await addActivity('exercise', selectedExercise, details, calories, category, exerciseParams);
         setSelectedExercise('');
         setExerciseParams({});
       }
@@ -404,49 +568,106 @@ export default function WorkoutPage() {
     );
   };
 
+  // Show loading screen if user is not loaded yet
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-white text-center">
+          <div className="animate-spin h-12 w-12 border-2 border-blue-400 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-xl">Loading your workout profile...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-blue-900 py-8 px-4">
       <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">
-            💪 Workout & Weight Loss Tracker
-          </h1>
-          <p className="text-gray-300">
-            Science-based approach to achieve your fitness goals
-          </p>
-        </div>
-
-        {/* User Profile Card */}
-        <div className="bg-gray-800 rounded-xl shadow-lg p-6 mb-6 border border-gray-700">
-          <h2 className="text-2xl font-semibold text-white mb-4">👤 Your Profile</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-400">{userStats.age}</div>
-              <div className="text-sm text-gray-300">Years Old</div>
+        {/* Header with User Profile */}
+        <div className="bg-gray-800/60 rounded-lg p-6 mb-8">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <h1 className="text-4xl font-bold text-white mb-2">
+                💪 Workout & Weight Loss Tracker
+              </h1>
+              <p className="text-gray-300">
+                Science-based approach to achieve your fitness goals
+              </p>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-400">{userStats.height} cm</div>
-              <div className="text-sm text-gray-300">Height</div>
-            </div>
-            <div className="text-center">
-              <input
-                type="number"
-                value={userStats.weeklyWeightLoss}
-                onChange={(e) => updateWeeklyWeightLoss(Number(e.target.value))}
-                className="text-2xl font-bold text-orange-400 bg-transparent border-b-2 border-orange-500/50 focus:border-orange-400 outline-none text-center w-20 mx-auto"
-                min="0.1"
-                max="2"
-                step="0.1"
-              />
-              <div className="text-sm text-gray-300">kg/week Goal</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-purple-400">{monthsNeeded.toFixed(1)}</div>
-              <div className="text-sm text-gray-300">Months to Goal</div>
-              <div className="text-xs text-gray-400">Auto-calculated</div>
+            
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => router.push('/workout/settings')}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+              >
+                ⚙️ Settings
+              </button>
+              <button
+                onClick={() => {
+                  logoutUser();
+                  router.push('/workout/login');
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
+              >
+                Logout
+              </button>
             </div>
           </div>
+
+          {/* User Profile Display */}
+          {userProfile && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-purple-600/40 p-3 rounded-lg border border-purple-400/30">
+                <div className="text-purple-300 text-sm">Weekly Goal</div>
+                <div className="text-2xl font-bold text-purple-100">{userProfile.weeklyGoal}</div>
+                <div className="text-purple-300 text-xs">kg/week Goal</div>
+              </div>
+
+              <div className="bg-yellow-600/40 p-3 rounded-lg border border-yellow-400/30">
+                <div className="text-yellow-300 text-sm">Time to Goal</div>
+                <div className="text-2xl font-bold text-yellow-100">{userProfile.monthsToGoal}</div>
+                <div className="text-yellow-300 text-xs">Months to Goal</div>
+                <div className="text-yellow-300/70 text-xs">Auto-calculated</div>
+              </div>
+
+              <div className="bg-gray-600/40 p-3 rounded-lg border border-gray-400/30">
+                <div className="text-gray-300 text-sm">Current Weight</div>
+                <div className="text-2xl font-bold text-gray-100">{userProfile.currentWeight}</div>
+                <div className="text-gray-300 text-xs">kg</div>
+              </div>
+
+              <div className="bg-green-600/40 p-3 rounded-lg border border-green-400/30">
+                <div className="text-green-300 text-sm">Age</div>
+                <div className="text-2xl font-bold text-green-100">{userProfile.age}</div>
+                <div className="text-green-300 text-xs">Years Old</div>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* System Status Banner */}
+        {systemStatus && systemStatus.includes('local') && (
+            <div className="mt-4 bg-yellow-900/40 border border-yellow-500/50 rounded-lg p-3 max-w-2xl mx-auto">
+              <div className="flex items-center gap-2">
+                <span className="text-yellow-400">⚠️</span>
+                <span className="text-sm text-yellow-300">
+                  <strong>Local Mode:</strong> Data is being saved locally. 
+                  <button 
+                    onClick={() => setSystemStatus('')}
+                    className="ml-2 text-yellow-200 hover:text-white underline"
+                  >
+                    Set up database for full features
+                  </button>
+                </span>
+                <button 
+                  onClick={() => setSystemStatus('')}
+                  className="ml-auto text-yellow-400 hover:text-yellow-200"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+        )}
 
         {/* Current Weight Update */}
         <div className="bg-gray-800 rounded-xl shadow-lg p-6 mb-6 border border-gray-700">
@@ -457,7 +678,7 @@ export default function WorkoutPage() {
               <input
                 type="number"
                 value={currentWeight}
-                onChange={(e) => setCurrentWeight(Number(e.target.value))}
+                onChange={(e) => handleWeightUpdate(Number(e.target.value))}
                 className="border border-gray-600 bg-gray-700 text-white rounded-lg px-4 py-2 text-lg font-semibold w-32 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/50"
                 step="0.1"
               />
@@ -528,7 +749,10 @@ export default function WorkoutPage() {
                       </div>
                       <div className="text-sm text-gray-300">{activity.details}</div>
                       <div className="text-xs text-gray-400">
-                        {activity.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {activity.timestamp ? 
+                          new Date(activity.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) :
+                          'Just now'
+                        }
                       </div>
                     </div>
                     <div className={`font-bold text-lg ${
@@ -537,7 +761,7 @@ export default function WorkoutPage() {
                       {activity.type === 'food' ? '-' : '+'}{Math.abs(activity.calories)}
                     </div>
                     <button
-                      onClick={() => setDailyActivities(prev => prev.filter(a => a.id !== activity.id))}
+                      onClick={() => activity.id && handleDeleteActivity(activity.id)}
                       className="ml-3 text-red-400 hover:text-red-300 text-sm"
                     >
                       ✕
@@ -549,112 +773,10 @@ export default function WorkoutPage() {
           </div>
         </div>
 
-        {/* Simple Step-by-Step Explanation */}
-        <div className="bg-gradient-to-r from-indigo-900/40 to-purple-900/40 rounded-xl shadow-lg p-6 mb-6 border border-indigo-500/50">
-          <h2 className="text-2xl font-semibold text-white mb-4">🔗 The Simple Truth - Step by Step</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-gray-700 rounded-lg p-4 border border-blue-500/50">
-              <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold mb-3">1</div>
-              <h3 className="font-bold text-blue-400 mb-2">Survival Calories</h3>
-              <p className="text-sm text-gray-300">
-                Your body burns <span className="font-bold text-blue-400">{Math.round(bmr)} calories</span> daily just to stay alive.
-              </p>
-            </div>
-
-            <div className="bg-gray-700 rounded-lg p-4 border border-green-500/50">
-              <div className="w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center font-bold mb-3">2</div>
-              <h3 className="font-bold text-green-400 mb-2">Daily Activities</h3>
-              <p className="text-sm text-gray-300">
-                Add basic movement = <span className="font-bold text-green-400">{Math.round(maintenanceCalories)} calories</span> total per day.
-              </p>
-            </div>
-
-            <div className="bg-gray-700 rounded-lg p-4 border border-orange-500/50">
-              <div className="w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center font-bold mb-3">3</div>
-              <h3 className="font-bold text-orange-400 mb-2">Weekly Goal</h3>
-              <p className="text-sm text-gray-300">
-                Need <span className="font-bold text-orange-400">{Math.round(weeklyCalorieDeficit)} calories</span> deficit weekly for {userStats.weeklyWeightLoss}kg loss.
-              </p>
-            </div>
-
-            <div className="bg-gray-700 rounded-lg p-4 border border-red-500/50">
-              <div className="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center font-bold mb-3">4</div>
-              <h3 className="font-bold text-red-400 mb-2">Daily Target</h3>
-              <p className="text-sm text-gray-300">
-                Eat <span className="font-bold text-red-400">{Math.round(targetDailyCalories)} calories</span> per day to reach goal.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 p-4 bg-gradient-to-r from-green-900/40 to-blue-900/40 rounded-lg border border-green-500/50">
-            <div className="flex items-center justify-center space-x-2">
-              <span className="text-lg">🎯</span>
-              <p className="text-sm font-semibold text-gray-300">
-                <strong>Bottom Line:</strong> Eat {Math.round(targetDailyCalories)} calories daily = automatic {userStats.weeklyWeightLoss}kg/week loss!
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Weekly Focus */}
-
-        {/* Simple Explanation */}
+        {/* Simple Truth Explanation */}
         <div className="bg-gray-800 rounded-xl shadow-lg p-6 mb-6 border border-gray-700">
-          <h2 className="text-2xl font-semibold text-white mb-4">🧠 Understanding Your Numbers (Simple Explanation)</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div className="p-4 bg-blue-900/30 rounded-lg border-l-4 border-blue-400">
-                <h3 className="font-bold text-blue-400 mb-2">1️⃣ BMR ({Math.round(bmr)} calories)</h3>
-                <p className="text-sm text-gray-300 mb-2">
-                  <strong>What it is:</strong> Calories your body burns just to stay alive (breathing, heart beating, brain working)
-                </p>
-                <p className="text-xs text-gray-400">
-                  <strong>Goes UP when:</strong> You weigh more, you're taller, you're younger<br/>
-                  <strong>Goes DOWN when:</strong> You lose weight, you get older
-                </p>
-              </div>
-
-              <div className="p-4 bg-green-900/30 rounded-lg border-l-4 border-green-400">
-                <h3 className="font-bold text-green-400 mb-2">2️⃣ Maintenance ({Math.round(maintenanceCalories)} calories)</h3>
-                <p className="text-sm text-gray-300 mb-2">
-                  <strong>What it is:</strong> BMR + basic daily activities (sedentary office job)
-                </p>
-                <p className="text-xs text-gray-400">
-                  <strong>Fixed at:</strong> BMR × 1.2 (sedentary lifestyle)<br/>
-                  <strong>Exercise calories:</strong> Added separately when you work out
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="p-4 bg-red-900/30 rounded-lg border-l-4 border-red-400">
-                <h3 className="font-bold text-red-400 mb-2">3️⃣ Weekly Goal ({Math.round(weeklyCalorieDeficit)} calories)</h3>
-                <p className="text-sm text-gray-300 mb-2">
-                  <strong>What it is:</strong> Total calories you need to "miss" each week to lose {userStats.weeklyWeightLoss}kg
-                </p>
-                <p className="text-xs text-gray-400">
-                  <strong>Formula:</strong> {userStats.weeklyWeightLoss}kg × 7700 cal/kg = {Math.round(weeklyCalorieDeficit)} cal/week<br/>
-                  <strong>Daily:</strong> {Math.round(dailyCalorieDeficit)} cal/day average
-                </p>
-              </div>
-
-              <div className="p-4 bg-orange-900/30 rounded-lg border-l-4 border-orange-400">
-                <h3 className="font-bold text-orange-400 mb-2">4️⃣ Target ({Math.round(targetDailyCalories)} calories)</h3>
-                <p className="text-sm text-gray-300 mb-2">
-                  <strong>What it is:</strong> How much you should eat per day to lose {userStats.weeklyWeightLoss}kg per week
-                </p>
-                <p className="text-xs text-gray-400">
-                  <strong>Goes UP when:</strong> Higher weight, slower weight loss goal<br/>
-                  <strong>Goes DOWN when:</strong> Lower weight, faster weight loss goal
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 p-4 bg-gradient-to-r from-yellow-900/30 to-orange-900/30 rounded-lg border border-yellow-500/50">
-            <h3 className="font-bold text-orange-400 mb-2">🔗 The Simple Truth:</h3>
+          <div className="p-4 bg-gradient-to-r from-yellow-900/30 to-orange-900/30 rounded-lg border border-yellow-500/50">
+            <h3 className="font-bold text-orange-400 mb-4 text-xl">🔗 The Simple Truth:</h3>
             <div className="text-sm text-gray-300 space-y-2">
               <p><strong>Step 1:</strong> Your body burns <span className="font-semibold text-blue-400">{Math.round(bmr)} calories</span> just to survive</p>
               <p><strong>Step 2:</strong> With sedentary lifestyle, you burn <span className="font-semibold text-green-400">{Math.round(maintenanceCalories)} calories</span> per day</p>
@@ -704,167 +826,54 @@ export default function WorkoutPage() {
           </div>
         </div>
 
-        {/* Weekly Focus */}
-        <div className="bg-gray-800 rounded-xl shadow-lg p-6 mb-6 border border-gray-700">
-          <h2 className="text-2xl font-semibold text-white mb-4">🎯 Weekly Weight Loss Focus</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-red-900/30 rounded-lg p-4 border border-red-500/50">
-              <div className="text-2xl font-bold text-red-400">{Math.round(dailyCalorieDeficit)}</div>
-              <div className="text-sm text-gray-300">Daily Average Deficit</div>
-              <div className="text-xs text-gray-400">Eat {Math.round(dailyCalorieDeficit)} cal less per day</div>
-            </div>
-            <div className="bg-orange-900/30 rounded-lg p-4 border border-orange-500/50">
-              <div className="text-2xl font-bold text-orange-400">{Math.round(weeklyCalorieDeficit)}</div>
-              <div className="text-sm text-gray-300">Weekly Target Deficit</div>
-              <div className="text-xs text-gray-400">= {userStats.weeklyWeightLoss}kg × 7700 cal/kg</div>
-            </div>
-            <div className="bg-yellow-900/30 rounded-lg p-4 border border-yellow-500/50">
-              <div className="text-2xl font-bold text-yellow-400">{Math.round(weeklyCalorieDeficit * 4.33)}</div>
-              <div className="text-sm text-gray-300">Monthly Target</div>
-              <div className="text-xs text-gray-400">~{Math.round(userStats.weeklyWeightLoss * 4.33 * 10)/10}kg per month</div>
-            </div>
-          </div>
-          
-          <div className="mt-6 p-4 bg-gradient-to-r from-green-900/30 to-blue-900/30 rounded-lg border border-green-500/50">
-            <h3 className="font-bold text-green-400 mb-2">🎯 The Simple Rule:</h3>
-            <p className="text-sm text-gray-300">
-              <strong>Week Success = {Math.round(weeklyCalorieDeficit)} calories deficit total</strong><br/>
-              You can achieve this through any combination of:
-            </p>
-            <ul className="text-sm text-gray-300 mt-2 space-y-1">
-              <li>• Eating {Math.round(dailyCalorieDeficit)} fewer calories daily</li>
-              <li>• Burning extra calories through exercise</li>
-              <li>• Mix of both (e.g., eat 300 less + burn 200 = 500 deficit/day)</li>
-            </ul>
-          </div>
-        </div>
 
-        {/* Detailed Ways to Create Deficit */}
-        <div className="bg-gray-800 rounded-xl shadow-lg p-6 mb-6 border border-gray-700">
-          <h2 className="text-2xl font-semibold text-white mb-4">🔥 How to Increase Your Calorie Deficit</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Method 1: Exercise More */}
-            <div className="bg-gradient-to-br from-blue-900/40 to-purple-900/40 rounded-xl p-6 border border-blue-500/50">
-              <div className="flex items-center mb-4">
-                <span className="text-3xl mr-3">💪</span>
-                <h3 className="text-xl font-bold text-blue-400">Method 1: Exercise More</h3>
+
+        {/* Analytics Section */}
+        {analytics && (
+          <div className="bg-gray-800 rounded-xl shadow-lg p-6 mb-6 border border-gray-700">
+            <h2 className="text-2xl font-semibold text-white mb-4">📊 7-Day Analytics</h2>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-gradient-to-br from-blue-900/50 to-blue-800/50 rounded-lg p-4 border border-blue-500/50">
+                <div className="text-2xl font-bold text-blue-400">{analytics.totalDays}</div>
+                <div className="text-sm text-gray-300">Days Tracked</div>
               </div>
-              
-              <div className="space-y-4">
-                <div className="bg-gray-700 rounded-lg p-4">
-                  <h4 className="font-semibold text-gray-200 mb-2">How It Works:</h4>
-                  <p className="text-sm text-gray-300 mb-3">
-                    Your body is like a car engine. More exercise = more fuel burned. 
-                    But you keep eating the same amount of fuel (food), so your body 
-                    uses stored fuel (fat) to make up the difference.
-                  </p>
-                  
-                  <h4 className="font-semibold text-gray-200 mb-2">Practical Examples:</h4>
-                  <ul className="text-sm text-gray-300 space-y-1">
-                    <li>• <strong>30 min walk:</strong> Burns ~150-200 calories</li>
-                    <li>• <strong>45 min gym session:</strong> Burns ~300-400 calories</li>
-                    <li>• <strong>1 hour cycling:</strong> Burns ~400-500 calories</li>
-                    <li>• <strong>Swimming 30 min:</strong> Burns ~250-350 calories</li>
-                    <li>• <strong>Dancing 1 hour:</strong> Burns ~200-300 calories</li>
-                  </ul>
-                </div>
-
-                <div className="bg-blue-900/30 rounded-lg p-3 border border-blue-500/50">
-                  <h4 className="font-semibold text-blue-400 mb-1">💡 Pro Tip:</h4>
-                  <p className="text-sm text-blue-300">
-                    Just 30 minutes of moderate exercise daily can burn an extra 
-                    1,400-2,100 calories per week! That's almost 0.3kg of fat loss.
-                  </p>
-                </div>
+              <div className="bg-gradient-to-br from-red-900/50 to-red-800/50 rounded-lg p-4 border border-red-500/50">
+                <div className="text-2xl font-bold text-red-400">{analytics.deficit}</div>
+                <div className="text-sm text-gray-300">Total Deficit (cal)</div>
               </div>
-            </div>
-
-            {/* Method 2: Eat Less */}
-            <div className="bg-gradient-to-br from-red-900/40 to-orange-900/40 rounded-xl p-6 border border-red-500/50">
-              <div className="flex items-center mb-4">
-                <span className="text-3xl mr-3">🍽️</span>
-                <h3 className="text-xl font-bold text-red-400">Method 2: Eat Less</h3>
+              <div className="bg-gradient-to-br from-green-900/50 to-green-800/50 rounded-lg p-4 border border-green-500/50">
+                <div className="text-2xl font-bold text-green-400">{analytics.predictedWeightLoss}kg</div>
+                <div className="text-sm text-gray-300">Predicted Weight Loss</div>
               </div>
-              
-              <div className="space-y-4">
-                <div className="bg-gray-700 rounded-lg p-4">
-                  <h4 className="font-semibold text-gray-200 mb-2">How It Works:</h4>
-                  <p className="text-sm text-gray-300 mb-3">
-                    Think of your body like a bank account. You deposit less money (food) 
-                    but your expenses (daily activities) stay the same. So your body 
-                    withdraws from savings (fat stores) to pay the bills.
-                  </p>
-                  
-                  <h4 className="font-semibold text-gray-200 mb-2">Easy Food Swaps:</h4>
-                  <ul className="text-sm text-gray-300 space-y-1">
-                    <li>• <strong>Skip 1 soda:</strong> Save ~150 calories</li>
-                    <li>• <strong>Half portion rice:</strong> Save ~100-150 calories</li>
-                    <li>• <strong>No oil cooking:</strong> Save ~100-200 calories</li>
-                    <li>• <strong>Fruit instead of dessert:</strong> Save ~200-300 calories</li>
-                    <li>• <strong>Water instead of juice:</strong> Save ~100-150 calories</li>
-                  </ul>
-                </div>
-
-                <div className="bg-red-900/30 rounded-lg p-3 border border-red-500/50">
-                  <h4 className="font-semibold text-red-400 mb-1">💡 Pro Tip:</h4>
-                  <p className="text-sm text-red-300">
-                    Small food changes add up! Cutting just 100 calories daily 
-                    = 700 calories/week = 0.1kg fat loss per week.
-                  </p>
-                </div>
+              <div className="bg-gradient-to-br from-purple-900/50 to-purple-800/50 rounded-lg p-4 border border-purple-500/50">
+                <div className="text-2xl font-bold text-purple-400">{analytics.weeklyAverage}</div>
+                <div className="text-sm text-gray-300">Weekly Avg Deficit</div>
               </div>
             </div>
           </div>
-
-          {/* Combination Strategy */}
-          <div className="mt-6 bg-gradient-to-r from-green-900/40 to-yellow-900/40 rounded-xl p-6 border border-green-500/50">
-            <div className="flex items-center mb-4">
-              <span className="text-3xl mr-3">🎯</span>
-              <h3 className="text-xl font-bold text-green-400">Best Strategy: Combine Both!</h3>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-gray-700 rounded-lg p-4">
-                <h4 className="font-semibold text-green-400 mb-2">Easy Mode</h4>
-                <ul className="text-sm text-gray-300 space-y-1">
-                  <li>• Eat 200 cal less daily</li>
-                  <li>• Walk 30 min (150 cal)</li>
-                  <li>• <strong>Total: 350 cal/day</strong></li>
-                  <li>• <strong>Weekly: 2,450 cal deficit</strong></li>
-                </ul>
-              </div>
-
-              <div className="bg-gray-700 rounded-lg p-4">
-                <h4 className="font-semibold text-yellow-400 mb-2">Medium Mode</h4>
-                <ul className="text-sm text-gray-300 space-y-1">
-                  <li>• Eat 300 cal less daily</li>
-                  <li>• Exercise 45 min (300 cal)</li>
-                  <li>• <strong>Total: 600 cal/day</strong></li>
-                  <li>• <strong>Weekly: 4,200 cal deficit</strong></li>
-                </ul>
-              </div>
-
-              <div className="bg-gray-700 rounded-lg p-4">
-                <h4 className="font-semibold text-red-400 mb-2">Beast Mode</h4>
-                <ul className="text-sm text-gray-300 space-y-1">
-                  <li>• Eat 400 cal less daily</li>
-                  <li>• Exercise 1 hour (400 cal)</li>
-                  <li>• <strong>Total: 800 cal/day</strong></li>
-                  <li>• <strong>Weekly: 5,600 cal deficit</strong></li>
-                </ul>
-              </div>
-            </div>
-
-            <div className="mt-4 p-3 bg-yellow-900/30 rounded-lg border border-yellow-500/50">
-              <p className="text-sm text-gray-300 text-center">
-                <strong>Remember:</strong> Your current goal needs <strong>{Math.round(weeklyCalorieDeficit)} calories deficit per week</strong>. 
-                Choose any combination above that gets you close to this number!
-              </p>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
+
+      {/* Floating Chat Button */}
+      <button
+        onClick={() => setIsChatOpen(true)}
+        className="fixed bottom-6 right-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white w-16 h-16 rounded-full shadow-lg hover:shadow-xl transform hover:scale-110 transition-all duration-200 flex items-center justify-center z-40"
+      >
+        <span className="text-2xl">🤖</span>
+      </button>
+
+      {/* Chat Component */}
+      <ChatComponent isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+
+      {/* Loading Overlay */}
+      {isLoadingData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 flex items-center gap-4 border border-gray-700">
+            <div className="animate-spin h-8 w-8 border-2 border-blue-400 border-t-transparent rounded-full"></div>
+            <span className="text-white font-semibold">Loading your data...</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
