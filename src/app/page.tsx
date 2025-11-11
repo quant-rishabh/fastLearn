@@ -320,10 +320,15 @@ export default function Home() {
         <h1 className="text-2xl font-extrabold tracking-tight text-purple-400 flex items-center gap-2 drop-shadow">
           <span role="img" aria-label="bolt">⚡</span> Quick Learn Quiz
         </h1>
-        <div className="flex gap-2 mt-2">
+        <div className="flex gap-2 mt-2 flex-wrap justify-center">
           <Link href="/">
             <button className="px-4 py-2 bg-purple-600 text-white rounded-lg shadow hover:bg-purple-700 transition-all text-sm font-semibold border border-purple-500">
               Home
+            </button>
+          </Link>
+          <Link href="/workout">
+            <button className="px-4 py-2 bg-orange-600 text-white rounded-lg shadow hover:bg-orange-700 transition-all text-sm font-semibold border border-orange-500 flex items-center gap-2">
+              ⚖️ Weight Loss Tracker
             </button>
           </Link>
           <Link href="/settings">
