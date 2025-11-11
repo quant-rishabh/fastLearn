@@ -724,6 +724,12 @@ export default function WorkoutPage() {
             
             <div className="flex items-center space-x-3">
               <button
+                onClick={() => window.open('/workout/analytics', '_blank')}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors"
+              >
+                📊 Detailed Analytics
+              </button>
+              <button
                 onClick={() => router.push('/workout/settings')}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
               >
