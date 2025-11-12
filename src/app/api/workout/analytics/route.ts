@@ -37,19 +37,27 @@ export async function GET(request: NextRequest) {
 
     // Get weight entries
     const { data: weightEntries, error: weightError } = await supabase
-      .from('weight_entries')
+      .from('weight_logs')
       .select('date, weight')
       .gte('date', startDateStr)
       .lte('date', endDateStr)
       .order('date', { ascending: true });
 
-    // Get user stats
-    const { data: userStats, error: userStatsError } = await supabase
-      .from('user_stats')
+    // Get user profile (single source of truth)
+    const { data: userProfile, error: userProfileError } = await supabase
+      .from('user_profile')
       .select('*')
-      .order('created_at', { ascending: false })
-      .limit(1)
       .single();
+
+    if (userProfileError) {
+      console.error('Error fetching user profile for analytics:', userProfileError);
+    } else {
+      console.log('✅ Analytics API loaded user profile:', {
+        weekly_weight_loss: userProfile?.weekly_weight_loss,
+        current_weight: userProfile?.current_weight,
+        target_weight: userProfile?.target_weight
+      });
+    }
 
     // Process the data day by day
     const analyticsData: any[] = [];
@@ -75,16 +83,16 @@ export async function GET(request: NextRequest) {
       totalsByDate[total.date] = total;
     });
 
-    // Default user stats for calculations
+    // Default user stats for calculations from user_profile (single source of truth)
     const stats = {
-      current_weight: userStats?.current_weight || 86,
-      target_weight: userStats?.target_weight || 68,
-      height: userStats?.height || 174,
-      age: userStats?.age || 25,
-      weekly_weight_loss: userStats?.weekly_weight_loss || 0.5,
-      bmr: userStats?.bmr || 2000,
-      maintenance_calories: userStats?.maintenance_calories || 2400,
-      target_daily_calories: userStats?.target_daily_calories || 1900
+      current_weight: userProfile?.current_weight || 86,
+      target_weight: userProfile?.target_weight || 68,
+      height: userProfile?.height || 174,
+      age: userProfile?.age || 25,
+      weekly_weight_loss: userProfile?.weekly_weight_loss || 0.5,
+      bmr: userProfile?.bmr || 2000,
+      maintenance_calories: userProfile?.maintenance_calories || 2400,
+      target_daily_calories: userProfile?.daily_calorie_target || 1900
     };
 
     // Calculate BMR function
@@ -92,7 +100,17 @@ export async function GET(request: NextRequest) {
       return 10 * weight + 6.25 * stats.height - 5 * stats.age + 5;
     };
 
+    // Initialize weight tracking with the oldest recorded weight or profile current weight
     let lastKnownWeight = stats.current_weight;
+    
+    // Find the earliest weight entry to use as starting point
+    const allWeightDates = Object.keys(weightByDate).sort();
+    if (allWeightDates.length > 0) {
+      const earliestWeight = weightByDate[allWeightDates[0]];
+      if (earliestWeight) {
+        lastKnownWeight = earliestWeight;
+      }
+    }
 
     // Generate daily data
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
@@ -118,11 +136,15 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      // Get weight for this day (or use last known weight)
-      const currentWeight = weightByDate[dateStr] || lastKnownWeight;
+      // Get weight for this specific date
+      let currentWeight = lastKnownWeight; // Default to last known weight
+      
+      // If there's a recorded weight for this specific date, use it
       if (weightByDate[dateStr]) {
-        lastKnownWeight = weightByDate[dateStr];
+        currentWeight = weightByDate[dateStr];
+        lastKnownWeight = currentWeight; // Update last known weight for future dates
       }
+      // If no weight recorded for this date, use lastKnownWeight (carry forward)
       
       // Calculate metabolic values based on actual weight
       const bmr = calculateBMR(currentWeight);
@@ -143,18 +165,21 @@ export async function GET(request: NextRequest) {
       const theoreticalWeightLoss = cumulativeDeficit / caloriesPerKg;
       const theoreticalWeight = Math.max(0, stats.current_weight - theoreticalWeightLoss);
 
+      // Calculate calorie balance (targetCalories - netCalories)
+      // Positive = good deficit, negative = eating too much
+      const calorieBalance = targetCalories - netCalories;
+
       analyticsData.push({
         date: dateStr,
         currentWeight: currentWeight,
-        expectedCalorieDeficit: expectedCalorieDeficit,
-        realCalorieDeficit: realCalorieDeficit,
-        theoreticalWeightFromRealDeficit: theoreticalWeight,
+        maintenanceCalories: maintenanceCalories,
+        targetDailyDeficit: expectedCalorieDeficit,
+        targetCalories: targetCalories,
         caloriesConsumed: caloriesConsumed,
         caloriesBurned: caloriesBurned,
         netCalories: netCalories,
+        calorieBalance: calorieBalance,
         bmr: bmr,
-        maintenanceCalories: maintenanceCalories,
-        targetCalories: targetCalories,
         activitiesCount: dayActivities.length
       });
     }
@@ -165,10 +190,11 @@ export async function GET(request: NextRequest) {
       userStats: stats,
       summary: {
         totalDays: analyticsData.length,
-        avgRealDeficit: analyticsData.reduce((sum, day) => sum + day.realCalorieDeficit, 0) / analyticsData.length,
-        totalExpectedDeficit: analyticsData.reduce((sum, day) => sum + day.expectedCalorieDeficit, 0),
-        totalRealDeficit: analyticsData.reduce((sum, day) => sum + day.realCalorieDeficit, 0),
-        projectedWeightLoss: analyticsData.reduce((sum, day) => sum + day.realCalorieDeficit, 0) / 7700
+        avgBalance: analyticsData.reduce((sum, day) => sum + day.calorieBalance, 0) / analyticsData.length,
+        totalTargetDeficit: analyticsData.reduce((sum, day) => sum + day.targetDailyDeficit, 0),
+        totalBalance: analyticsData.reduce((sum, day) => sum + day.calorieBalance, 0),
+        totalFoodConsumed: analyticsData.reduce((sum, day) => sum + day.caloriesConsumed, 0),
+        totalExerciseBurned: analyticsData.reduce((sum, day) => sum + day.caloriesBurned, 0)
       }
     });
 

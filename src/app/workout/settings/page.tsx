@@ -73,23 +73,41 @@ export default function WorkoutSettingsPage() {
     setMessage('');
 
     try {
-      const updates = {
-        dateOfBirth: formData.dateOfBirth,
-        height: parseFloat(formData.height),
-        targetWeight: parseFloat(formData.targetWeight),
-        weeklyGoal: parseFloat(formData.weeklyGoal)
-      };
+      // Save to database via API
+      const response = await fetch('/api/workout/user-stats', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          height: parseFloat(formData.height),
+          target_weight: parseFloat(formData.targetWeight),
+          weekly_weight_loss: parseFloat(formData.weeklyGoal)
+        }),
+      });
 
-      const result = updateUserProfile(updates);
+      const result = await response.json();
+      
       if (result.success) {
         setMessage('Profile updated successfully!');
+        
+        // Also update localStorage for compatibility
+        const updates = {
+          dateOfBirth: formData.dateOfBirth,
+          height: parseFloat(formData.height),
+          targetWeight: parseFloat(formData.targetWeight),
+          weeklyGoal: parseFloat(formData.weeklyGoal)
+        };
+        updateUserProfile(updates);
+        
         // Refresh profile data
         const updatedProfile = getUserProfile();
         setProfile(updatedProfile);
       } else {
-        setMessage(`Error: ${result.message}`);
+        setMessage(`Error: ${result.error || 'Failed to update profile'}`);
       }
     } catch (error) {
+      console.error('Error updating profile:', error);
       setMessage('An unexpected error occurred');
     } finally {
       setLoading(false);

@@ -44,49 +44,84 @@ export default function WorkoutPage() {
   // Initialize current weight with default, will be updated when user loads
   const [currentWeight, setCurrentWeight] = useState(86);
 
+  // Load user profile from database (single source of truth)
+  const loadUserProfileFromDB = async () => {
+    try {
+      console.log('Loading user profile from database...');
+      const response = await fetch('/api/workout/user-stats');
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Database response:', result);
+        
+        if (result.success && result.userProfile) {
+          const profile = result.userProfile;
+          
+          setUserProfile(profile);
+          setUser({ username: 'user' }); // Simple user object for now
+          
+          // Load ALL profile data from database
+          setUserStats({
+            currentWeight: profile.current_weight || 86,
+            targetWeight: profile.target_weight || 68,
+            height: profile.height || 174,
+            age: profile.age || 25,
+            weeklyWeightLoss: profile.weekly_weight_loss || 0.5
+          });
+          
+          setCurrentWeight(profile.current_weight || 86);
+          
+          console.log('✅ Loaded from database:');
+          console.log('- Current Weight:', profile.current_weight);
+          console.log('- Target Weight:', profile.target_weight);
+          console.log('- Weekly Goal:', profile.weekly_weight_loss);
+          console.log('- Height:', profile.height);
+          console.log('- Age:', profile.age);
+          
+          return true;
+        } else {
+          console.error('No user profile found in database');
+          return false;
+        }
+      } else {
+        console.error('Failed to fetch user profile from database');
+        return false;
+      }
+    } catch (error) {
+      console.error('Error loading user profile from database:', error);
+      return false;
+    }
+  };
+
   // Check authentication on page load
   useEffect(() => {
-    if (!isLoggedIn()) {
-      router.push('/workout/login');
-      return;
-    }
-
-    const currentUser = getCurrentUser();
-    const profile = getUserProfile();
-    
-    if (currentUser && profile) {
-      setUser(currentUser);
-      setUserProfile(profile);
-      
-      // Load profile settings and current weight from profile
-      setUserStats(prev => ({
-        ...prev,
-        targetWeight: profile.targetWeight,
-        height: profile.height,
-        age: profile.age,
-        weeklyWeightLoss: profile.weeklyGoal
-      }));
-      
-      // PRIORITY: Use profile currentWeight if it exists and is not default
-      let initialWeight = currentWeight; // fallback
-      
-      if (profile.currentWeight && profile.currentWeight !== 86) {
-        // Profile has a saved weight - use it as primary source
-        initialWeight = profile.currentWeight;
-        console.log('Loading weight from profile:', initialWeight, 'kg');
-      } else {
-        // No saved profile weight, check daily tracking as backup
-        const dailyWeight = getWeightProgress(currentUser.username);
-        if (dailyWeight.currentWeight && dailyWeight.currentWeight !== 70) {
-          initialWeight = dailyWeight.currentWeight;
-          console.log('Loading weight from daily tracking:', initialWeight, 'kg');
-        }
-      }
-      
-      setCurrentWeight(initialWeight);
-      setUserStats(prev => ({ ...prev, currentWeight: initialWeight }));
-    }
+    // Skip localStorage check for now - load directly from database
+    loadUserProfileFromDB();
   }, [router]);
+
+  // Add focus listener to refresh profile data when returning to the page
+  useEffect(() => {
+    const handleFocus = () => {
+      console.log('Page focused - refreshing from database...');
+      // Refresh profile data from database when user returns to the page
+      loadUserProfileFromDB();
+    };
+
+    // Also add visibility change listener for more reliable detection
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        handleFocus();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   // Daily tracking state
   const [dailyActivities, setDailyActivities] = useState<Activity[]>([]);
@@ -104,16 +139,9 @@ export default function WorkoutPage() {
   // Load data on component mount
   useEffect(() => {
     loadTodayData();
-    loadUserStats();
     loadAnalytics();
+    // User profile is loaded by loadUserProfileFromDB() in the auth useEffect
   }, []);
-
-  // Load user stats when user changes (but don't override current weight)
-  useEffect(() => {
-    if (user?.username) {
-      loadUserStats();
-    }
-  }, [user]);
 
   // Save user stats when they change
   useEffect(() => {
@@ -203,26 +231,7 @@ export default function WorkoutPage() {
     }
   };
 
-  const loadUserStats = async () => {
-    try {
-      const response = await getUserStats();
-      if (response.success && response.userStats) {
-        // Load target weight and weekly goals but preserve profile current weight
-        setUserStats(prev => ({
-          ...prev,
-          targetWeight: response.userStats.target_weight,
-          weeklyWeightLoss: response.userStats.weekly_weight_loss
-          // Don't override currentWeight from database - profile is the source of truth
-        }));
-        
-        console.log('loadUserStats - Loaded target weight:', response.userStats.target_weight);
-        console.log('loadUserStats - Loaded weekly goal:', response.userStats.weekly_weight_loss);
-        console.log('loadUserStats - Current weight preserved from profile:', currentWeight, 'kg');
-      }
-    } catch (error) {
-      console.error('Error loading user stats:', error);
-    }
-  };
+
 
   const loadAnalytics = async () => {
     try {
@@ -250,47 +259,72 @@ export default function WorkoutPage() {
     }
   };
 
-  // Save current weight to user profile database
+  // Save current weight to database (single source of truth)
   const handleSaveCurrentWeight = async () => {
     try {
-      // Update the user profile with new current weight
-      const currentUser = getCurrentUser();
-      const currentProfile = getUserProfile();
+      console.log('💾 Saving current weight to database:', currentWeight, 'kg');
       
-      if (currentUser && currentProfile) {
-        // Import the updateUserProfile function
-        const { updateUserProfile } = await import('@/utils/auth');
-        
-        // Update the main user profile in auth system (this is the primary source)
-        const updateResult = updateUserProfile({ currentWeight: currentWeight });
-        
-        if (updateResult.success) {
-          // Update the profile object
-          const updatedProfile = {
-            ...currentProfile,
-            currentWeight: currentWeight
-          };
-          
-          // Also save weight entry for daily tracking
-          await saveWeight(currentWeight, currentUser.username);
-          
-          // Save to user stats database
-          await handleSaveUserStats();
-          
-          console.log('Current weight saved to profile:', currentWeight, 'kg');
-          
-          // Update local state to reflect the saved data
-          setUserProfile(updatedProfile);
-          
-          return true;
-        } else {
-          console.error('Failed to update user profile:', updateResult.message);
-          return false;
-        }
+      // Calculate BMR and other values
+      const height = userStats.height || 174;
+      const age = userStats.age || 25;
+      const bmr = 10 * currentWeight + 6.25 * height - 5 * age + 5;
+      const maintenanceCalories = bmr * 1.2;
+      const caloriesPerKg = 7700;
+      const weeklyCalorieDeficit = userStats.weeklyWeightLoss * caloriesPerKg;
+      const dailyCalorieTarget = maintenanceCalories - (weeklyCalorieDeficit / 7);
+      
+      // 1. Save weight to weight_logs table (for analytics with date-specific tracking)
+      const weightResponse = await fetch('/api/workout/weight', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          weight: currentWeight,
+          date: new Date().toISOString().split('T')[0] // Today's date
+        })
+      });
+
+      if (!weightResponse.ok) {
+        throw new Error('Failed to save weight to weight_logs');
       }
-      return false;
+
+      // 2. Update user profile in database (for overall profile data)
+      const profileResponse = await fetch('/api/workout/user-stats', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          current_weight: currentWeight,
+          target_weight: userStats.targetWeight,
+          height: userStats.height,
+          age: userStats.age,
+          gender: 'male',
+          weekly_weight_loss: userStats.weeklyWeightLoss,
+          bmr: Math.round(bmr),
+          maintenance_calories: Math.round(maintenanceCalories),
+          daily_calorie_target: Math.round(dailyCalorieTarget),
+          daily_protein_target: Math.round(currentWeight * 2) // 2g per kg
+        })
+      });
+      
+      if (profileResponse.ok) {
+        console.log('✅ Weight saved to both weight_logs and user_profile successfully');
+        
+        // Refresh profile data to ensure we have the latest
+        await loadUserProfileFromDB();
+        
+        alert(`✅ Weight saved: ${currentWeight} kg (saved to analytics & profile)`);
+        return true;
+      } else {
+        console.error('Failed to save weight to user_profile');
+        alert('⚠️ Weight saved to logs but failed to update profile');
+        return false;
+      }
     } catch (error) {
       console.error('Error saving current weight:', error);
+      alert('❌ Error saving weight');
       return false;
     }
   };
@@ -815,6 +849,65 @@ export default function WorkoutPage() {
               <div className="text-2xl font-bold text-red-400">-{todayCaloriesFromFood || 0}</div>
               <div className="text-sm text-gray-300">🍽️ Food Spent</div>
               <div className="text-xs text-gray-400">Calories consumed today</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Comprehensive Stats Overview */}
+        <div className="bg-gray-800/60 rounded-lg p-6 mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold text-white">📊 Your Profile Stats</h2>
+            <button
+              onClick={async () => {
+                console.log('🔄 Manual refresh clicked - loading from database...');
+                const success = await loadUserProfileFromDB();
+                if (success) {
+                  alert(`✅ Refreshed from database! Weekly goal: ${userStats.weeklyWeightLoss} kg/week`);
+                } else {
+                  alert('❌ Failed to refresh from database');
+                }
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition-colors"
+            >
+              🔄 Refresh Data
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-purple-900/30 rounded-lg p-3 text-center border border-purple-500/50">
+              <div className="text-2xl font-bold text-purple-400">{currentWeight}</div>
+              <div className="text-sm text-gray-300">kg</div>
+              <div className="text-xs text-purple-300">Current Weight</div>
+            </div>
+            
+            <div className="bg-blue-900/30 rounded-lg p-3 text-center border border-blue-500/50">
+              <div className="text-2xl font-bold text-blue-400">{userStats.targetWeight}</div>
+              <div className="text-sm text-gray-300">kg</div>
+              <div className="text-xs text-blue-300">Target Weight</div>
+            </div>
+            
+            <div className="bg-yellow-900/30 rounded-lg p-3 text-center border border-yellow-500/50">
+              <div className="text-2xl font-bold text-yellow-400">{userStats.weeklyWeightLoss}</div>
+              <div className="text-sm text-gray-300">kg/week</div>
+              <div className="text-xs text-yellow-300">Target Loss Rate</div>
+            </div>
+            
+            <div className="bg-orange-900/30 rounded-lg p-3 text-center border border-orange-500/50">
+              <div className="text-2xl font-bold text-orange-400">{Math.round(dailyCalorieDeficit)}</div>
+              <div className="text-sm text-gray-300">cal/day</div>
+              <div className="text-xs text-orange-300">Target Daily Deficit</div>
+            </div>
+          </div>
+          
+          <div className="mt-4 text-center">
+            <div className="text-sm text-gray-400">
+              Last updated: {new Date().toLocaleTimeString()} | 
+              <button 
+                onClick={() => window.location.reload()} 
+                className="ml-2 text-blue-400 hover:text-blue-300 underline"
+              >
+                Force Full Refresh
+              </button>
             </div>
           </div>
         </div>
