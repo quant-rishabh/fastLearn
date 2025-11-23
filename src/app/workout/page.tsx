@@ -468,7 +468,8 @@ export default function WorkoutPage() {
   const todayMaintenanceCalories = (maintenanceCalories || 0) + todayCaloriesFromExercise;
   
   // ALWAYS calculate balance in real-time based on current weight (don't use cached value)
-  const todayRemainingToEat = ((targetDailyCalories || 0) + todayCaloriesFromExercise) - todayCaloriesFromFood;
+  // Balance should be simple: Target - Food (exercise is separate bonus)
+  const todayRemainingToEat = (targetDailyCalories || 0) - todayCaloriesFromFood;
   
   const todayActualDeficit = todayMaintenanceCalories - todayCaloriesFromFood;
 
@@ -717,8 +718,22 @@ export default function WorkoutPage() {
       
       const exerciseData = await getExerciseDataFromAI(exerciseDescription);
       
+      // Validate exercise data first
+      if (!exerciseData.calories || exerciseData.calories <= 0) {
+        setLastLookup(`❌ Invalid exercise data: No calories calculated`);
+        return;
+      }
+      
       // Use new API endpoint directly (bypassing old addActivity function)
       try {
+        console.log('🔄 Sending exercise data:', {
+          type: 'exercise',
+          description: exerciseData.enhancedDescription,
+          category: exerciseData.category,
+          calories: exerciseData.calories,
+          protein_grams: null
+        });
+
         const response = await fetch('/api/workout/activities', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -731,24 +746,54 @@ export default function WorkoutPage() {
           })
         });
 
-        if (response.ok) {
-          const result = await response.json();
+        if (!response.ok) {
+          // Try to get error message from response
+          const errorText = await response.text();
+          console.error('❌ HTTP Error:', response.status, errorText);
+          setLastLookup(`❌ Server error (${response.status}): ${errorText.substring(0, 50)}...`);
+          return;
+        }
+
+        const result = await response.json();
+        console.log('📊 API Response:', result);
+
+        if (result.success) {
           // Refresh today's data
           await loadTodayData();
           
           // Clear input and show success
           setExerciseDescription('');
-          
-          // Enhanced lookup message is already set in getExerciseDataFromAI
+          setLastLookup(`✅ Added: ${exerciseData.enhancedDescription} (+${exerciseData.calories} cal)`);
         } else {
-          console.error('Failed to save exercise');
-          setLastLookup(`❌ Failed to save: ${exerciseDescription}`);
+          const errorMsg = result.error || result.message || 'Unknown API error';
+          console.error('❌ API returned error:', errorMsg);
+          setLastLookup(`❌ Database error: ${errorMsg}`);
+          // Don't clear input on error so user can retry
         }
       } catch (error) {
-        console.error('Error saving exercise:', error);
-        setLastLookup(`❌ Error saving: ${exerciseDescription}`);
+        console.error('❌ Network error saving exercise:', error);
+        
+        // Fallback: Save to local state if database fails
+        try {
+          const newActivity = {
+            id: Date.now().toString(),
+            type: 'exercise' as const,
+            name: exerciseData.enhancedDescription,
+            description: exerciseData.enhancedDescription,
+            category: exerciseData.category,
+            calories: exerciseData.calories,
+            timestamp: new Date(),
+            created_at: new Date().toISOString()
+          };
+          
+          // Add to local state as fallback
+          setDailyActivities(prev => [newActivity, ...prev]);
+          setExerciseDescription('');
+          setLastLookup(`⚠️ Added locally (${exerciseData.calories} cal) - Database unavailable`);
+        } catch (fallbackError) {
+          setLastLookup(`❌ Network error: ${error instanceof Error ? error.message : 'Connection failed'}`);
+        }
       }
-      setExerciseDescription('');
     };
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
