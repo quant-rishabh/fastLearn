@@ -487,21 +487,51 @@ export default function WorkoutPage() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ 
-            food: description,
-            quantity: 1 // AI will parse quantity from description
+            food: description
           }),
         });
 
-        if (!response.ok) {
-          throw new Error('Failed to get calories');
-        }
-
         const data = await response.json();
-        return data.calories || 0;
+        
+        // Check if response has an error but still has data (fallback scenario)
+        if (!response.ok && !data.calories) {
+          throw new Error(data.error || 'Failed to analyze food');
+        }
+        
+        // Enhanced feedback with breakdown
+        let lookupMessage = `${description} = ${data.calories} calories`;
+        if (data.protein) {
+          lookupMessage += `, ${data.protein}g protein`;
+        }
+        if (data.breakdown && data.breakdown.length > 1) {
+          const items = data.breakdown.map((item: any) => `${item.qty}${item.unit.charAt(0)} ${item.item}`).join(', ');
+          lookupMessage = `Multiple items: ${items} = ${data.calories} cal, ${data.protein}g protein`;
+        }
+        
+        // Add indicator if this was estimated vs AI analyzed
+        if (data.enhancedDescription && data.enhancedDescription.includes('estimated')) {
+          lookupMessage += ' (estimated)';
+        }
+        
+        setLastLookup(lookupMessage);
+        
+        return {
+          calories: data.calories || 0,
+          protein: data.protein || 0,
+          enhancedDescription: data.enhancedDescription || description,
+          breakdown: data.breakdown
+        };
       } catch (error) {
         console.error('Error getting calories:', error);
-        // Fallback to basic estimation
-        return 100; // Basic fallback: 100 calories
+        // Basic fallback estimation based on description
+        const fallbackCalories = 100;
+        setLastLookup(`${description} = ${fallbackCalories} calories (service unavailable)`);
+        return {
+          calories: fallbackCalories,
+          protein: 3,
+          enhancedDescription: `${description} (+${fallbackCalories} cal estimated)`,
+          breakdown: null
+        };
       } finally {
         setIsLoading(false);
       }
@@ -510,7 +540,7 @@ export default function WorkoutPage() {
     const handleAddFood = async () => {
       if (!foodDescription.trim()) return;
       
-      const calories = await getCaloriesFromAI(foodDescription);
+      const foodData = await getCaloriesFromAI(foodDescription);
       
       // Use new API endpoint directly (bypassing old addActivity function)
       try {
@@ -519,10 +549,10 @@ export default function WorkoutPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: 'food',
-            description: `${foodDescription} (${calories} cal)`,
-            category: 'food', // Default food category
-            calories: calories,
-            protein_grams: 0 // We could enhance this with AI later
+            description: foodData.enhancedDescription,
+            category: 'food',
+            calories: -Math.abs(foodData.calories), // Negative for food consumption
+            protein_grams: foodData.protein || 0
           })
         });
 
@@ -530,14 +560,16 @@ export default function WorkoutPage() {
           const result = await response.json();
           // Refresh today's data
           await loadTodayData();
-          setLastLookup(`${foodDescription} = ${calories} calories`);
+          
+          // Clear input - feedback already set in getCaloriesFromAI
           setFoodDescription('');
         } else {
           console.error('Failed to save food');
+          setLastLookup(`❌ Failed to save: ${foodDescription}`);
         }
       } catch (error) {
         console.error('Error saving food:', error);
-        setLastLookup(`Error saving: ${foodDescription}`);
+        setLastLookup(`❌ Error saving: ${foodDescription}`);
       }
     };
 
@@ -554,13 +586,22 @@ export default function WorkoutPage() {
           <div>
             <input
               type="text"
-              placeholder="Type in plain English (e.g., '2 eggs', '1 slice pizza', 'medium apple')..."
+              placeholder="List your food naturally..."
               value={foodDescription}
               onChange={(e) => setFoodDescription(e.target.value)}
               onKeyPress={handleKeyPress}
               className="w-full border border-gray-600 bg-gray-700 text-white rounded-lg px-3 py-2 focus:border-red-400 focus:ring-2 focus:ring-red-400/50 placeholder-gray-400"
               disabled={isLoading}
             />
+          </div>
+          
+          <div className="text-xs text-gray-400 space-y-1">
+            <div className="font-medium text-red-400">💡 Examples (Indian & International):</div>
+            <div>• "3 roti with karela sabzi 70g, raita 100g" → Multiple items</div>
+            <div>• "2 eggs, 1 slice bread, banana" → Full breakfast</div>
+            <div>• "dal chawal, 3 idli, milk 200ml" → Complete meal</div>
+            <div>• "1 samosa, rasgulla" → Snacks with accurate counts</div>
+            <div>• "paneer 100g, chicken breast 150g" → Protein sources</div>
           </div>
           
           <button
@@ -579,8 +620,17 @@ export default function WorkoutPage() {
           </button>
 
           {lastLookup && (
-            <div className="text-xs text-gray-400 bg-gray-800 rounded px-2 py-1">
-              Last: {lastLookup}
+            <div className={`text-xs rounded px-2 py-2 ${
+              lastLookup.includes('Multiple items') 
+                ? 'text-orange-300 bg-orange-900/50 border border-orange-500/30' 
+                : lastLookup.includes('❌') 
+                  ? 'text-red-300 bg-red-900/50 border border-red-500/30'
+                  : 'text-gray-300 bg-gray-800'
+            }`}>
+              <div className="flex items-start gap-1">
+                <span className="text-xs opacity-70">Last:</span>
+                <span className="flex-1">{lastLookup}</span>
+              </div>
             </div>
           )}
 
@@ -613,29 +663,48 @@ export default function WorkoutPage() {
               weight: currentWeight,
               height: userStats.height,
               age: userStats.age,
-              gender: 'male' // assuming male for BMR calculation
+              gender: 'male' // Default - could be made configurable later
             }
           }),
         });
 
-        if (!response.ok) {
-          throw new Error('Failed to analyze exercise');
+        const data = await response.json();
+        
+        // Check if response has an error but still has data (fallback scenario)
+        if (!response.ok && !data.calories) {
+          throw new Error(data.error || 'Failed to analyze exercise');
         }
 
-        const data = await response.json();
+        // Show detailed breakdown if available
+        let lookupMessage = `${description} = +${data.calories} calories`;
+        if (data.breakdown) {
+          lookupMessage = `Multiple exercises detected: ${data.breakdown} = +${data.calories} total calories`;
+        }
+        
+        // Add indicator if this was estimated vs AI analyzed
+        if (data.enhancedDescription && data.enhancedDescription.includes('estimated')) {
+          lookupMessage += ' (estimated)';
+        }
+        
+        setLastLookup(lookupMessage);
+
         return {
           calories: data.calories || 0,
           category: data.category || 'general',
           enhancedDescription: data.enhancedDescription || description,
+          breakdown: data.breakdown,
           proteinGrams: null // exercises don't provide protein
         };
       } catch (error) {
         console.error('Error analyzing exercise:', error);
-        // Fallback to basic estimation
+        // Improved fallback calculation based on user weight and exercise type
+        const fallbackCalories = Math.round(currentWeight * 0.5); // 0.5 cal per kg as basic estimate
+        setLastLookup(`${description} = +${fallbackCalories} calories (service unavailable)`);
+        
         return {
-          calories: 50, // Basic fallback: 50 calories
+          calories: fallbackCalories,
           category: 'general',
-          enhancedDescription: description,
+          enhancedDescription: `${description} (+${fallbackCalories} cal estimated)`,
           proteinGrams: null
         };
       } finally {
@@ -666,13 +735,18 @@ export default function WorkoutPage() {
           const result = await response.json();
           // Refresh today's data
           await loadTodayData();
-          setLastLookup(`${exerciseDescription} = +${exerciseData.calories} calories`);
+          
+          // Clear input and show success
+          setExerciseDescription('');
+          
+          // Enhanced lookup message is already set in getExerciseDataFromAI
         } else {
           console.error('Failed to save exercise');
+          setLastLookup(`❌ Failed to save: ${exerciseDescription}`);
         }
       } catch (error) {
         console.error('Error saving exercise:', error);
-        setLastLookup(`Error saving: ${exerciseDescription}`);
+        setLastLookup(`❌ Error saving: ${exerciseDescription}`);
       }
       setExerciseDescription('');
     };
@@ -690,7 +764,7 @@ export default function WorkoutPage() {
           <div>
             <input
               type="text"
-              placeholder="Describe your workout (e.g., 'bench press 3 sets heavy', 'ran 5km', 'pushups till failure')..."
+              placeholder="Describe your workout naturally..."
               value={exerciseDescription}
               onChange={(e) => setExerciseDescription(e.target.value)}
               onKeyPress={handleKeyPress}
@@ -699,8 +773,17 @@ export default function WorkoutPage() {
             />
           </div>
           
+          <div className="text-xs text-gray-400 space-y-1">
+            <div className="font-medium text-green-400">💡 Examples:</div>
+            <div>• "ran 3km in 20 minutes" → AI calculates pace & METs</div>
+            <div>• "gym workout 60 minutes" → Mixed exercise session</div>
+            <div>• "deadlifts 5 sets of 8 heavy" → Compound strength training</div>
+            <div>• "HIIT workout 30 min" → High-intensity interval training</div>
+            <div>• "100 pushups" → Bodyweight exercise calculation</div>
+          </div>
+          
           <div className="text-xs text-green-400 mb-2">
-            Your weight: {currentWeight}kg (AI uses this for accurate calculations)
+            Your weight: {currentWeight}kg (AI uses this for accurate MET-based calories)
           </div>
           
           <button
@@ -719,8 +802,17 @@ export default function WorkoutPage() {
           </button>
 
           {lastLookup && (
-            <div className="text-xs text-gray-400 bg-gray-800 rounded px-2 py-1">
-              Last: {lastLookup}
+            <div className={`text-xs rounded px-2 py-2 ${
+              lastLookup.includes('Multiple exercises') 
+                ? 'text-green-300 bg-green-900/50 border border-green-500/30' 
+                : lastLookup.includes('❌') 
+                  ? 'text-red-300 bg-red-900/50 border border-red-500/30'
+                  : 'text-gray-300 bg-gray-800'
+            }`}>
+              <div className="flex items-start gap-1">
+                <span className="text-xs opacity-70">Last:</span>
+                <span className="flex-1">{lastLookup}</span>
+              </div>
             </div>
           )}
 

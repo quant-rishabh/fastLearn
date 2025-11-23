@@ -11,174 +11,176 @@ export async function POST(request: Request) {
       );
     }
 
-    // AI Prompt for exercise analysis
-    const prompt = `
-You are a fitness expert AI. Analyze the following exercise description and provide accurate calorie burn estimation.
+    console.log('Processing exercise analysis for:', exercise);
+    console.log('User weight:', userWeight, 'kg');
+    console.log('OpenAI API Key available:', !!process.env.OPENAI_API_KEY);
 
-User Profile:
-- Weight: ${userWeight} kg
-- Height: ${userProfile?.height || 175} cm  
-- Age: ${userProfile?.age || 25} years
-- Gender: ${userProfile?.gender || 'male'}
+    // Optimized AI Prompt - let AI handle everything
+    const prompt = `Exercise physiologist. Calculate calories using MET values.
 
-Exercise Description: "${exercise}"
+User: ${userWeight}kg, ${userProfile?.height || 175}cm, ${userProfile?.age || 25}y, ${userProfile?.gender || 'male'}
 
-Based on this information, provide a JSON response with:
-1. calories: Total calories burned (positive integer)
-2. category: Exercise category (cardio, push, pull, legs, core, or general)
-3. enhancedDescription: A clear, detailed description of what was done
+Exercise: "${exercise}"
 
-Guidelines:
-- Use scientific METs (Metabolic Equivalent Tasks) when possible
-- Consider user's weight for accurate calorie calculation  
-- For strength training: estimate based on intensity, sets, reps if mentioned
-- For cardio: use time, distance, intensity if provided
-- Categories: cardio (running, cycling), push (chest, shoulders, triceps), pull (back, biceps), legs (quads, glutes, calves), core (abs, back), general (mixed/unclear)
+Rules:
+1. Identify all exercises, duration/distance/reps
+2. Use: Calories = MET × Weight(kg) × Time(hours)  
+3. Estimate time if only reps/sets given
+4. Sum if multiple exercises
 
-Example responses:
-- "bench press 3 sets heavy" → ~250-300 calories, category: "push"
-- "ran 5km moderate pace" → ~350-400 calories, category: "cardio"  
-- "100 pushups" → ~180-220 calories, category: "push"
-- "deadlifts 5 sets" → ~300-350 calories, category: "pull"
+JSON only:
+{"calories": <number>, "category": "<cardio|push|pull|legs|mixed|core>", "enhancedDescription": "<summary>", "breakdown": "<if multiple>"}`;
 
-Respond only with valid JSON:
-{
-  "calories": number,
-  "category": "string", 
-  "enhancedDescription": "string"
-}
-`;
-
-    // For now, I'll create a simple rule-based system since we don't have OpenAI API setup
-    // In production, you would call OpenAI API here
-    const result = analyzeExerciseLocally(exercise, userWeight);
+    // Try AI first, fallback if needed
+    let result;
+    
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        result = await getAIAnalysis(prompt);
+        console.log('AI analysis successful');
+      } catch (error) {
+        console.error('AI analysis failed:', error);
+        result = createExerciseFallback(exercise, userWeight);
+      }
+    } else {
+      console.log('No OpenAI API key, using fallback');
+      result = createExerciseFallback(exercise, userWeight);
+    }
 
     return NextResponse.json(result);
 
   } catch (error) {
     console.error('Error in ai-analyze-exercise:', error);
-    return NextResponse.json(
-      { error: 'Failed to analyze exercise' },
-      { status: 500 }
-    );
+    return NextResponse.json(createExerciseFallback('unknown exercise', 70), { status: 200 });
   }
 }
 
-// Local exercise analysis (replace with OpenAI API in production)
-function analyzeExerciseLocally(exercise: string, userWeight: number) {
+// Create a simple fallback response for exercises
+function createExerciseFallback(exercise: string, userWeight: number) {
   const exerciseLower = exercise.toLowerCase();
+  let calories = 50;
+  let category = 'general';
+  let timeEstimate = 30; // default 30 minutes
   
-  // Extract numbers from the description
+  // Extract numbers for duration/distance
   const numbers = exercise.match(/\d+/g)?.map(Number) || [];
   
-  let calories = 0;
-  let category = 'general';
-  let enhancedDescription = exercise;
-
-  // Cardio exercises
+  // Basic heuristics for common exercises
   if (exerciseLower.includes('run') || exerciseLower.includes('jog')) {
     category = 'cardio';
-    if (exerciseLower.includes('km') || exerciseLower.includes('kilometer')) {
-      const distance = numbers.find(n => n <= 50) || 5; // assume 5km if unclear
-      calories = Math.round(userWeight * distance * 1.0); // 1 cal per kg per km
-      enhancedDescription = `Running ${distance}km (+${calories} cal)`;
-    } else {
-      const minutes = numbers.find(n => n <= 120) || 30; // assume 30 min if unclear
-      calories = Math.round(userWeight * minutes * 0.12); // 0.12 cal per kg per minute
-      enhancedDescription = `Running ${minutes} minutes (+${calories} cal)`;
-    }
-  }
-  
-  // Strength training - Push exercises
-  else if (exerciseLower.includes('bench press') || exerciseLower.includes('push up') || 
-           exerciseLower.includes('pushup') || exerciseLower.includes('shoulder press')) {
-    category = 'push';
-    
-    if (exerciseLower.includes('bench press')) {
-      const sets = numbers.find(n => n <= 10) || 3;
-      const reps = numbers.find(n => n > 5 && n <= 20) || 12;
-      const weight = numbers.find(n => n > 20) || userWeight * 0.7; // assume 70% bodyweight if no weight given
-      calories = Math.round(sets * reps * weight * 0.004);
-      enhancedDescription = `Bench press ${sets} sets x ${reps} reps (+${calories} cal)`;
-    } else if (exerciseLower.includes('pushup') || exerciseLower.includes('push up')) {
-      const totalReps = numbers.find(n => n > 0) || 20;
-      calories = Math.round(totalReps * userWeight * 0.0025);
-      enhancedDescription = `${totalReps} pushups (+${calories} cal)`;
-    } else {
-      calories = Math.round(userWeight * 2.5); // general push exercise
-      enhancedDescription = `Push workout (+${calories} cal)`;
-    }
-  }
-  
-  // Pull exercises
-  else if (exerciseLower.includes('deadlift') || exerciseLower.includes('pull up') || 
-           exerciseLower.includes('pullup') || exerciseLower.includes('row')) {
-    category = 'pull';
-    
-    if (exerciseLower.includes('deadlift')) {
-      const sets = numbers.find(n => n <= 10) || 3;
-      const reps = numbers.find(n => n > 3 && n <= 15) || 8;
-      const weight = numbers.find(n => n > 20) || userWeight * 1.2; // assume 120% bodyweight
-      calories = Math.round(sets * reps * weight * 0.005);
-      enhancedDescription = `Deadlifts ${sets} sets x ${reps} reps (+${calories} cal)`;
-    } else if (exerciseLower.includes('pull up') || exerciseLower.includes('pullup')) {
-      const totalReps = numbers.find(n => n > 0) || 10;
-      calories = Math.round(totalReps * userWeight * 0.004);
-      enhancedDescription = `${totalReps} pull-ups (+${calories} cal)`;
-    } else {
-      calories = Math.round(userWeight * 3.0); // general pull exercise
-      enhancedDescription = `Pull workout (+${calories} cal)`;
-    }
-  }
-  
-  // Leg exercises
-  else if (exerciseLower.includes('squat') || exerciseLower.includes('lunge') || 
-           exerciseLower.includes('leg')) {
-    category = 'legs';
-    
-    if (exerciseLower.includes('squat')) {
-      const totalReps = numbers.find(n => n > 0) || 20;
-      if (numbers.find(n => n > 20)) { // weighted squats
-        const weight = numbers.find(n => n > 20) || userWeight * 0.5;
-        const sets = numbers.find(n => n <= 10) || 3;
-        const reps = numbers.find(n => n > 3 && n <= 20) || 12;
-        calories = Math.round(sets * reps * weight * 0.0045);
-        enhancedDescription = `Weighted squats ${sets}x${reps} (+${calories} cal)`;
-      } else { // bodyweight squats
-        calories = Math.round(totalReps * userWeight * 0.003);
-        enhancedDescription = `${totalReps} bodyweight squats (+${calories} cal)`;
-      }
-    } else {
-      calories = Math.round(userWeight * 2.8); // general leg exercise
-      enhancedDescription = `Leg workout (+${calories} cal)`;
-    }
-  }
-  
-  // Walking
-  else if (exerciseLower.includes('walk')) {
-    category = 'cardio';
-    if (exerciseLower.includes('steps')) {
-      const steps = numbers.find(n => n > 100) || 5000;
-      calories = Math.round(steps * userWeight * 0.0004);
-      enhancedDescription = `Walking ${steps} steps (+${calories} cal)`;
+    if (exerciseLower.includes('km')) {
+      const distance = numbers.find(n => n <= 20) || 5; // assume 5km if unclear
+      calories = Math.round(userWeight * distance * 1.0); // rough estimate: 1 cal per kg per km
     } else {
       const minutes = numbers.find(n => n <= 120) || 30;
-      calories = Math.round(userWeight * minutes * 0.05); // 0.05 cal per kg per minute walking
-      enhancedDescription = `Walking ${minutes} minutes (+${calories} cal)`;
+      timeEstimate = minutes;
+      calories = Math.round(userWeight * minutes * 0.12); // rough running calorie rate
     }
   }
-  
-  // Generic workout if no specific exercise detected
+  else if (exerciseLower.includes('walk')) {
+    category = 'cardio';
+    const minutes = numbers.find(n => n <= 120) || 30;
+    timeEstimate = minutes;
+    calories = Math.round(userWeight * minutes * 0.05); // walking rate
+  }
+  else if (exerciseLower.includes('cycle') || exerciseLower.includes('bike')) {
+    category = 'cardio';
+    const minutes = numbers.find(n => n <= 120) || 30;
+    timeEstimate = minutes;
+    calories = Math.round(userWeight * minutes * 0.08); // cycling rate
+  }
+  else if (exerciseLower.includes('pushup') || exerciseLower.includes('push up')) {
+    category = 'push';
+    const reps = numbers.find(n => n > 0) || 20;
+    calories = Math.round(reps * userWeight * 0.004); // rough pushup estimate
+  }
+  else if (exerciseLower.includes('pullup') || exerciseLower.includes('pull up')) {
+    category = 'pull';
+    const reps = numbers.find(n => n > 0) || 10;
+    calories = Math.round(reps * userWeight * 0.006); // rough pullup estimate
+  }
+  else if (exerciseLower.includes('squat')) {
+    category = 'legs';
+    const reps = numbers.find(n => n > 0) || 20;
+    calories = Math.round(reps * userWeight * 0.005); // rough squat estimate
+  }
+  else if (exerciseLower.includes('gym') || exerciseLower.includes('workout')) {
+    category = 'mixed';
+    const minutes = numbers.find(n => n > 20 && n <= 120) || 60;
+    timeEstimate = minutes;
+    calories = Math.round(userWeight * minutes * 0.08); // general workout rate
+  }
+  else if (exerciseLower.includes('hiit')) {
+    category = 'mixed';
+    const minutes = numbers.find(n => n <= 60) || 20;
+    timeEstimate = minutes;
+    calories = Math.round(userWeight * minutes * 0.15); // high intensity rate
+  }
   else {
-    const intensity = exerciseLower.includes('intense') || exerciseLower.includes('heavy') ? 1.5 : 1.0;
-    const duration = numbers.find(n => n <= 120) || 30; // assume 30 min workout
-    calories = Math.round(userWeight * duration * 0.08 * intensity); // general workout formula
-    enhancedDescription = `Workout session (+${calories} cal)`;
+    // Generic exercise
+    const minutes = numbers.find(n => n > 5 && n <= 120) || 30;
+    timeEstimate = minutes;
+    calories = Math.round(userWeight * minutes * 0.06); // moderate activity
   }
 
+  // Ensure minimum calories
+  calories = Math.max(calories, 10);
+
   return {
-    calories: Math.max(calories, 10), // minimum 10 calories
-    category,
-    enhancedDescription
+    calories: calories,
+    category: category,
+    enhancedDescription: `${exercise} (+${calories} cal - estimated)`,
+    breakdown: undefined
   };
+}
+
+// OpenAI API call - AI handles everything
+async function getAIAnalysis(prompt: string) {
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        max_tokens: 200,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('OpenAI API error:', response.status, errorText);
+      throw new Error(`OpenAI API failed: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content;
+    
+    if (!content) {
+      throw new Error('No AI response content');
+    }
+    
+    console.log('AI response:', content);
+    
+    try {
+      const parsed = JSON.parse(content);
+      
+      // Validate required fields
+      if (typeof parsed.calories !== 'number' || typeof parsed.category !== 'string') {
+        throw new Error('Invalid response format: missing calories or category');
+      }
+      
+      return parsed;
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError, 'Content:', content);
+      throw new Error(`Invalid JSON response from AI: ${parseError}`);
+    }
+  } catch (error) {
+    console.error('getAIAnalysis error:', error);
+    throw error;
+  }
 }

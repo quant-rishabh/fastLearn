@@ -299,8 +299,8 @@ export default function WorkoutAnalyticsPage() {
                     <th className="px-3 py-3 text-center font-semibold text-purple-400 border-b border-gray-600 min-w-[90px]">💵 Balance<br/><span className="text-xs font-normal">(Can Eat)</span></th>
                     <th className="px-3 py-3 text-center font-semibold text-orange-400 border-b border-gray-600 min-w-[80px]">Food<br/><span className="text-xs font-normal">Consumed</span></th>
                     <th className="px-3 py-3 text-center font-semibold text-cyan-400 border-b border-gray-600 min-w-[80px]">Exercise<br/><span className="text-xs font-normal">Burned</span></th>
-                    <th className="px-3 py-3 text-center font-semibold text-yellow-400 border-b border-gray-600 min-w-[80px]">Net<br/><span className="text-xs font-normal">Calories</span></th>
-                    <th className="px-3 py-3 text-center font-semibold text-red-400 border-b border-gray-600 min-w-[80px]">Balance<br/><span className="text-xs font-normal">(+/-)</span></th>
+                    <th className="px-3 py-3 text-center font-semibold text-red-400 border-b border-gray-600 min-w-[80px]">Deficit<br/><span className="text-xs font-normal">Created</span></th>
+                    <th className="px-3 py-3 text-center font-semibold text-green-400 border-b border-gray-600 min-w-[90px]">Expected<br/><span className="text-xs font-normal">Weight (kg)</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700/50">
@@ -334,8 +334,8 @@ export default function WorkoutAnalyticsPage() {
                         -{row.targetDailyDeficit.toFixed(0)}
                       </td>
                       <td className="px-3 py-2 text-center text-purple-400 font-medium border-r border-gray-700/50">
-                        <div className="text-sm">
-                          Target: {row.targetCalories.toFixed(0)} - Food: {row.caloriesConsumed.toFixed(0)}
+                        <div className="text-sm font-semibold">
+                          {(row.targetCalories - row.caloriesConsumed).toFixed(0)}
                         </div>
                       </td>
                       <td className="px-3 py-2 text-center text-orange-400 border-r border-gray-700/50">
@@ -344,17 +344,25 @@ export default function WorkoutAnalyticsPage() {
                       <td className="px-3 py-2 text-center text-cyan-400 border-r border-gray-700/50">
                         {row.caloriesBurned.toFixed(0)}
                       </td>
-                      <td className="px-3 py-2 text-center text-yellow-400 border-r border-gray-700/50">
-                        {row.netCalories.toFixed(0)}
+                      <td className="px-3 py-2 text-center font-semibold border-r border-gray-700/50">
+                        {(() => {
+                          const actualDeficit = row.maintenanceCalories - row.caloriesConsumed + row.caloriesBurned;
+                          return (
+                            <div className={`px-2 py-1 rounded text-xs ${
+                              actualDeficit > 0 
+                                ? 'bg-green-900/50 text-green-400' 
+                                : 'bg-red-900/50 text-red-400'
+                            }`}>
+                              {actualDeficit > 0 ? '+' : ''}{actualDeficit.toFixed(0)}
+                            </div>
+                          );
+                        })()}
                       </td>
-                      <td className="px-3 py-2 text-center font-semibold">
-                        <div className={`px-2 py-1 rounded text-xs ${
-                          row.calorieBalance > 0 
-                            ? 'bg-green-900/50 text-green-400' 
-                            : 'bg-red-900/50 text-red-400'
-                        }`}>
-                          {row.calorieBalance > 0 ? '+' : ''}{row.calorieBalance.toFixed(0)}
-                        </div>
+                      <td className="px-3 py-2 text-center text-green-400 font-medium">
+                        {(() => {
+                          const actualDeficit = row.maintenanceCalories - row.caloriesConsumed + row.caloriesBurned;
+                          return (row.currentWeight - (actualDeficit / 7700)).toFixed(1);
+                        })()}
                       </td>
                     </tr>
                   ))}
@@ -410,17 +418,18 @@ export default function WorkoutAnalyticsPage() {
             </div>
             <div className="space-y-2">
               <p><span className="text-cyan-400 font-semibold">Exercise Burned:</span> Calories burned through exercise</p>
-              <p><span className="text-yellow-400 font-semibold">Net Calories:</span> Consumed - Burned = Net intake</p>
-              <p><span className="text-red-400 font-semibold">Balance (+/-):</span> Target - Net calories (positive = good deficit)</p>
+              <p><span className="text-red-400 font-semibold">Deficit Created:</span> Maintenance - Food + Exercise (actual calorie deficit)</p>
+              <p><span className="text-green-400 font-semibold">Expected Weight:</span> Projected weight based on calorie deficit (1kg = 7700 calories)</p>
             </div>
           </div>
           
           <div className="mt-6 p-4 bg-gradient-to-r from-yellow-900/30 to-orange-900/30 rounded-lg border border-yellow-500/50">
             <h4 className="font-bold text-orange-400 mb-2">🔍 Key Insights:</h4>
             <ul className="text-gray-300 text-sm space-y-1">
-              <li>• <strong>Positive Balance (+):</strong> You're creating a deficit - good for weight loss!</li>
-              <li>• <strong>Negative Balance (-):</strong> You're eating more than target - might slow weight loss</li>
+              <li>• <strong>Positive Deficit (+):</strong> You're creating a deficit - good for weight loss!</li>
+              <li>• <strong>Negative Deficit (-):</strong> You're eating more than target - might slow weight loss</li>
               <li>• <strong>💵 Balance Shows:</strong> How many calories you can still eat to stay on target</li>
+              <li>• <strong>Expected Weight:</strong> Shows theoretical weight if the deficit continues (7700 calories = 1kg loss)</li>
               <li>• <strong>Target Daily Deficit:</strong> Based on your weekly weight loss goal (0.5kg/week = ~550 cal/day)</li>
             </ul>
           </div>
