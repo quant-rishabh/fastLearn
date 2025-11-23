@@ -15,21 +15,15 @@ export async function POST(request: Request) {
     console.log('User weight:', userWeight, 'kg');
     console.log('OpenAI API Key available:', !!process.env.OPENAI_API_KEY);
 
-    // Optimized AI Prompt - let AI handle everything
-    const prompt = `Exercise physiologist. Calculate calories using MET values.
+    // Optimized AI Prompt for complex workouts
+    const prompt = `Calculate total calories burned. User: ${userWeight}kg, ${userProfile?.height || 175}cm, ${userProfile?.age || 25}y.
 
-User: ${userWeight}kg, ${userProfile?.height || 175}cm, ${userProfile?.age || 25}y, ${userProfile?.gender || 'male'}
+Workout: "${exercise}"
 
-Exercise: "${exercise}"
+Use MET values. For strength training with sets/reps/weight, estimate 5-8 METs and duration. For cardio, use distance/pace. Sum all exercises.
 
-Rules:
-1. Identify all exercises, duration/distance/reps
-2. Use: Calories = MET × Weight(kg) × Time(hours)  
-3. Estimate time if only reps/sets given
-4. Sum if multiple exercises
-
-JSON only:
-{"calories": <number>, "category": "<cardio|push|pull|legs|mixed|core>", "enhancedDescription": "<summary>", "breakdown": "<if multiple>"}`;
+Return JSON:
+{"calories": <total_number>, "category": "<cardio|strength|mixed>", "enhancedDescription": "<brief_summary>", "breakdown": "<exercise_details>"}`;
 
     // Try AI first, fallback if needed
     let result;
@@ -147,7 +141,7 @@ async function getAIAnalysis(prompt: string) {
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.1,
-        max_tokens: 200,
+        max_tokens: 500,
       }),
     });
 
