@@ -44,9 +44,28 @@ export default function WorkoutPage() {
   // Initialize current weight with default, will be updated when user loads
   const [currentWeight, setCurrentWeight] = useState(86);
 
+  // Add state to prevent concurrent API calls
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [lastProfileLoad, setLastProfileLoad] = useState(0);
+
   // Load user profile from database (single source of truth)
   const loadUserProfileFromDB = async () => {
+    // Prevent concurrent calls
+    if (isLoadingProfile) {
+      console.log('Profile already loading, skipping...');
+      return false;
+    }
+
+    // Prevent too frequent calls (minimum 2 seconds between calls)
+    const now = Date.now();
+    if (now - lastProfileLoad < 2000) {
+      console.log('Profile loaded recently, skipping...');
+      return true; // Return true since we have recent data
+    }
+
     try {
+      setIsLoadingProfile(true);
+      setLastProfileLoad(now);
       console.log('Loading user profile from database...');
       const response = await fetch('/api/workout/user-stats');
       
@@ -90,6 +109,8 @@ export default function WorkoutPage() {
     } catch (error) {
       console.error('Error loading user profile from database:', error);
       return false;
+    } finally {
+      setIsLoadingProfile(false);
     }
   };
 
@@ -97,28 +118,60 @@ export default function WorkoutPage() {
   useEffect(() => {
     // Skip localStorage check for now - load directly from database
     loadUserProfileFromDB();
-  }, [router]);
+  }, []); // Remove router dependency to prevent multiple calls
 
-  // Add focus listener to refresh profile data when returning to the page
+  // Add focus listener to refresh profile data when returning to the page (with debouncing)
   useEffect(() => {
+    let debounceTimer: NodeJS.Timeout;
+    let lastFocusTime = 0;
+    let wasHidden = false;
+    const DEBOUNCE_DELAY = 10000; // Increased to 10 seconds minimum between refreshes
+
     const handleFocus = () => {
-      console.log('Page focused - refreshing from database...');
-      // Refresh profile data from database when user returns to the page
-      loadUserProfileFromDB();
+      // Only refresh if the page was actually hidden (switched tabs/apps)
+      if (!wasHidden) {
+        console.log('Focus event ignored (page was not hidden)');
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastFocusTime < DEBOUNCE_DELAY) {
+        console.log('Focus event ignored (too soon after last refresh)');
+        return;
+      }
+
+      console.log('Page focused after being hidden - refreshing from database...');
+      lastFocusTime = now;
+      wasHidden = false;
+      
+      // Clear any existing timer
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+
+      // Debounce the API call
+      debounceTimer = setTimeout(() => {
+        loadUserProfileFromDB();
+      }, 2000); // Wait 2 seconds before making the call
     };
 
-    // Also add visibility change listener for more reliable detection
+    // Track visibility changes more precisely
     const handleVisibilityChange = () => {
-      if (!document.hidden) {
+      if (document.hidden) {
+        wasHidden = true;
+        console.log('Page hidden - will refresh on next focus');
+      } else if (wasHidden) {
         handleFocus();
       }
     };
 
-    window.addEventListener('focus', handleFocus);
+    // Only use visibility change listener (more reliable than focus)
     document.addEventListener('visibilitychange', handleVisibilityChange);
     
     return () => {
-      window.removeEventListener('focus', handleFocus);
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
@@ -494,9 +547,13 @@ export default function WorkoutPage() {
 
         const data = await response.json();
         
-        // Check if response has an error but still has data (fallback scenario)
-        if (!response.ok && !data.calories) {
-          throw new Error(data.error || 'Failed to analyze food');
+        // Check if AI analysis failed
+        if (!response.ok) {
+          throw new Error(data.error || 'AI service failed');
+        }
+
+        if (!data.calories || typeof data.calories !== 'number') {
+          throw new Error('Invalid AI response - no calorie data');
         }
         
         // Enhanced feedback with breakdown
@@ -509,30 +566,19 @@ export default function WorkoutPage() {
           lookupMessage = `Multiple items: ${items} = ${data.calories} cal, ${data.protein}g protein`;
         }
         
-        // Add indicator if this was estimated vs AI analyzed
-        if (data.enhancedDescription && data.enhancedDescription.includes('estimated')) {
-          lookupMessage += ' (estimated)';
-        }
-        
+        lookupMessage += ' (AI analyzed)';
         setLastLookup(lookupMessage);
         
         return {
-          calories: data.calories || 0,
+          calories: data.calories,
           protein: data.protein || 0,
           enhancedDescription: data.enhancedDescription || description,
           breakdown: data.breakdown
         };
       } catch (error) {
-        console.error('Error getting calories:', error);
-        // Basic fallback estimation based on description
-        const fallbackCalories = 100;
-        setLastLookup(`${description} = ${fallbackCalories} calories (service unavailable)`);
-        return {
-          calories: fallbackCalories,
-          protein: 3,
-          enhancedDescription: `${description} (+${fallbackCalories} cal estimated)`,
-          breakdown: null
-        };
+        console.error('❌ AI analysis failed:', error);
+        setLastLookup(`❌ AI failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        throw error; // Re-throw to prevent adding invalid data
       } finally {
         setIsLoading(false);
       }
@@ -541,10 +587,10 @@ export default function WorkoutPage() {
     const handleAddFood = async () => {
       if (!foodDescription.trim()) return;
       
-      const foodData = await getCaloriesFromAI(foodDescription);
-      
-      // Use new API endpoint directly (bypassing old addActivity function)
       try {
+        const foodData = await getCaloriesFromAI(foodDescription);
+        
+        // Use new API endpoint directly (bypassing old addActivity function)
         const response = await fetch('/api/workout/activities', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -569,8 +615,8 @@ export default function WorkoutPage() {
           setLastLookup(`❌ Failed to save: ${foodDescription}`);
         }
       } catch (error) {
-        console.error('Error saving food:', error);
-        setLastLookup(`❌ Error saving: ${foodDescription}`);
+        console.error('Error in handleAddFood:', error);
+        // Error message already set in getCaloriesFromAI - don't clear input so user can retry
       }
     };
 
@@ -996,6 +1042,10 @@ export default function WorkoutPage() {
             <h2 className="text-xl font-semibold text-white">📊 Your Profile Stats</h2>
             <button
               onClick={async () => {
+                if (isLoadingProfile) {
+                  alert('⏳ Already refreshing, please wait...');
+                  return;
+                }
                 console.log('🔄 Manual refresh clicked - loading from database...');
                 const success = await loadUserProfileFromDB();
                 if (success) {
@@ -1004,9 +1054,10 @@ export default function WorkoutPage() {
                   alert('❌ Failed to refresh from database');
                 }
               }}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition-colors"
+              disabled={isLoadingProfile}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white px-3 py-1 rounded text-sm transition-colors"
             >
-              🔄 Refresh Data
+              {isLoadingProfile ? '⏳ Loading...' : '🔄 Refresh Data'}
             </button>
           </div>
           

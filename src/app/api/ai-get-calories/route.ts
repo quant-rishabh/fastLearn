@@ -8,89 +8,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Food description is required' }, { status: 400 });
     }
 
-    console.log('Processing food analysis for:', food);
-    console.log('OpenAI API Key available:', !!process.env.OPENAI_API_KEY);
+    console.log('🍽️ Processing food analysis for:', food);
+    console.log('🔑 OpenAI API Key available:', !!process.env.OPENAI_API_KEY);
+    
+    // Log first few characters of API key for debugging (safely)
+    if (process.env.OPENAI_API_KEY) {
+      console.log('🔑 API Key starts with:', process.env.OPENAI_API_KEY.substring(0, 10) + '...');
+    }
 
     // Optimized AI Prompt - let AI handle everything
-    const prompt = `Nutritionist. Calculate calories and protein for this food.
+    const prompt = `You are a nutrition expert. Analyze this food and return ONLY valid JSON.
 
 Food: "${food}"
 
-Rules:
-1. Parse all items with quantities (3 roti, 70g sabzi, 200ml milk)
-2. Use standard nutrition values for Indian & international foods
-3. Sum total calories and protein
-4. Create breakdown for each item
+Calculate accurate calories and protein for Indian and international foods.
+For quantities like "1 chai", "150ml juice", use realistic portions.
 
-JSON only:
-{"calories": <total>, "protein": <total>, "enhancedDescription": "<summary>", "breakdown": [{"item": "<name>", "qty": <number>, "unit": "<g|ml|piece>", "calories": <number>, "protein": <number>}]}`;
+Return only this JSON format:
+{"calories": 65, "protein": 2.5, "enhancedDescription": "1 chai (65 cal, 2.5g protein)", "breakdown": [{"item": "chai", "qty": 1, "unit": "cup", "calories": 65, "protein": 2.5}]}
 
-    // Try AI first, fallback if needed
-    let result;
-    
-    if (process.env.OPENAI_API_KEY) {
-      try {
-        result = await getAIFoodAnalysis(prompt);
-        console.log('AI analysis successful');
-      } catch (error) {
-        console.error('AI analysis failed:', error);
-        result = createFallbackResponse(food);
-      }
-    } else {
-      console.log('No OpenAI API key, using fallback');
-      result = createFallbackResponse(food);
+Be accurate - chai is ~65 cal, not 100. Pomegranate juice 150ml is ~85 cal. Uttapam is ~150 cal.`;
+
+    // Only use AI - no fallbacks
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('❌ No OpenAI API key configured');
+      return NextResponse.json({ error: 'AI service not configured' }, { status: 500 });
     }
+
+    console.log('🤖 Calling OpenAI API...');
+    const result = await getAIFoodAnalysis(prompt);
+    console.log('✅ AI analysis successful:', result);
 
     return NextResponse.json(result);
 
   } catch (error) {
-    console.error('Error in ai-get-calories:', error);
-    return NextResponse.json(createFallbackResponse('unknown food'), { status: 200 });
+    console.error('❌ Error in ai-get-calories:', error);
+    return NextResponse.json({ 
+      error: 'AI analysis failed. Please try again or check your food description.' 
+    }, { status: 500 });
   }
 }
 
-// Create a simple fallback response
-function createFallbackResponse(food: string) {
-  // Basic estimation based on food description
-  let calories = 100;
-  let protein = 3;
-  
-  const foodLower = food.toLowerCase();
-  
-  // Simple heuristics for common foods
-  if (foodLower.includes('rice') || foodLower.includes('chawal')) calories = 130;
-  else if (foodLower.includes('roti') || foodLower.includes('chapati')) calories = 80;
-  else if (foodLower.includes('dal')) calories = 180;
-  else if (foodLower.includes('chicken')) { calories = 165; protein = 25; }
-  else if (foodLower.includes('egg')) { calories = 70; protein = 6; }
-  else if (foodLower.includes('milk')) { calories = 70; protein = 3; }
-  else if (foodLower.includes('banana')) calories = 90;
-  
-  // Look for numbers to estimate quantity
-  const numbers = food.match(/\d+/g);
-  if (numbers && numbers.length > 0) {
-    const qty = parseInt(numbers[0]);
-    if (qty > 1 && qty < 10) {
-      calories *= qty;
-      protein *= qty;
-    }
-  }
 
-  return {
-    calories: Math.round(calories),
-    protein: Math.round(protein * 10) / 10,
-    enhancedDescription: `${food} (≈${Math.round(calories)} cal, ${Math.round(protein * 10) / 10}g protein - estimated)`,
-    breakdown: [
-      {
-        item: food,
-        qty: 1,
-        unit: 'serving',
-        calories: Math.round(calories),
-        protein: Math.round(protein * 10) / 10
-      }
-    ]
-  };
-}
 
 // OpenAI API call - AI handles everything
 async function getAIFoodAnalysis(prompt: string) {
@@ -125,7 +84,21 @@ async function getAIFoodAnalysis(prompt: string) {
     console.log('AI response:', content);
     
     try {
-      const parsed = JSON.parse(content);
+      // Extract JSON from markdown code blocks if present
+      let jsonString = content;
+      if (content.includes('```json')) {
+        const match = content.match(/```json\s*([\s\S]*?)\s*```/);
+        if (match) {
+          jsonString = match[1];
+        }
+      } else if (content.includes('```')) {
+        const match = content.match(/```\s*([\s\S]*?)\s*```/);
+        if (match) {
+          jsonString = match[1];
+        }
+      }
+      
+      const parsed = JSON.parse(jsonString);
       
       // Validate required fields
       if (typeof parsed.calories !== 'number' || typeof parsed.protein !== 'number') {
