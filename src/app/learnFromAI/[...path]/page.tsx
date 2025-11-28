@@ -20,6 +20,7 @@ export default function AILearningPage() {
   const [newNodeName, setNewNodeName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [notes, setNotes] = useState('');
 
   // Get current path from URL
   const pathArray = params.path ? (Array.isArray(params.path) ? params.path : [params.path]) : [];
@@ -47,6 +48,7 @@ export default function AILearningPage() {
       const data = await response.json();
       setCurrentNode(data.currentNode);
       setChildren(data.children || []);
+      setNotes(data.currentNode?.notes || '');
     } catch (err) {
       console.error('Error loading nodes:', err);
       setError('Failed to load learning nodes');
@@ -77,6 +79,32 @@ export default function AILearningPage() {
     } catch (err) {
       console.error('Error creating node:', err);
       setError('Failed to create new node');
+    }
+  };
+
+  const saveNotes = async () => {
+    try {
+      const response = await fetch('/api/ai-learning/save-notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: currentPath,
+          notes: notes
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('API Error:', errorData);
+        throw new Error(errorData.error || 'Failed to save notes');
+      }
+
+      // Show success message briefly
+      setError('Notes saved successfully!');
+      setTimeout(() => setError(''), 2000);
+    } catch (err) {
+      console.error('Error saving notes:', err);
+      setError(`Failed to save notes: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
@@ -121,18 +149,60 @@ export default function AILearningPage() {
         {currentPath.length === 0 ? 'Root' : currentPath[currentPath.length - 1]}
       </h2>
 
-      {/* Current Node Notes */}
-      {currentNode?.notes && (
-        <div style={{ 
-          backgroundColor: '#222', 
-          padding: '10px', 
-          marginBottom: '20px',
-          border: '1px solid #666',
-          color: 'white'
-        }}>
-          <strong>Notes:</strong> {currentNode.notes}
-        </div>
-      )}
+      {/* Notes Section */}
+      <div style={{ 
+        backgroundColor: '#222', 
+        padding: '15px', 
+        marginBottom: '20px',
+        border: '1px solid #666'
+      }}>
+        <h3>Notes:</h3>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Add your notes here..."
+          style={{
+            width: '100%',
+            minHeight: '100px',
+            backgroundColor: '#333',
+            color: 'white',
+            border: '1px solid #666',
+            padding: '10px',
+            fontSize: '14px'
+          }}
+        />
+        <button
+          onClick={saveNotes}
+          style={{
+            marginTop: '10px',
+            padding: '8px 16px',
+            backgroundColor: '#007bff',
+            color: 'white',
+            border: 'none',
+            cursor: 'pointer',
+            marginRight: '10px'
+          }}
+        >
+          Save Notes
+        </button>
+        
+        {notes.trim() && (
+          <Link 
+            href={`/learnFromAI/${currentPath.map(segment => encodeURIComponent(segment)).join('/')}/quiz`}
+            style={{
+              display: 'inline-block',
+              marginTop: '10px',
+              padding: '8px 16px',
+              backgroundColor: '#28a745',
+              color: 'white',
+              textDecoration: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            Start AI Quiz
+          </Link>
+        )}
+      </div>
 
       {/* Error Display */}
       {error && (

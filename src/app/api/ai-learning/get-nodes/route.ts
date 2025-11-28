@@ -27,10 +27,13 @@ export async function POST(request: NextRequest) {
       children = rootChildren || [];
     } else {
       // Find current node by path
+      // Convert JavaScript array to PostgreSQL array format
+      const pathString = '{' + path.map(p => `"${p}"`).join(',') + '}';
+      
       const { data: nodeData, error: nodeError } = await supabase
         .from('ai_learning_nodes')
         .select('*')
-        .eq('path', path)
+        .eq('path', pathString)
         .single();
 
       if (nodeError) {

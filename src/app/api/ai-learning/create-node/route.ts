@@ -16,10 +16,13 @@ export async function POST(request: NextRequest) {
 
     // If parentPath is provided, find the parent node
     if (parentPath && Array.isArray(parentPath) && parentPath.length > 0) {
+      // Convert JavaScript array to PostgreSQL array format
+      const pathString = '{' + parentPath.map(p => `"${p}"`).join(',') + '}';
+      
       const { data: parentNode, error: parentError } = await supabase
         .from('ai_learning_nodes')
         .select('id')
-        .eq('path', parentPath)
+        .eq('path', pathString)
         .single();
 
       if (parentError) {
