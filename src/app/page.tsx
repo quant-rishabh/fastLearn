@@ -350,6 +350,16 @@ export default function Home() {
       </header>
 
       <div className="max-w-md mx-auto mt-6 px-2">
+        {/* AI Learning System Link */}
+        <div className="mb-6 text-center">
+          <Link href="/learnFromAI">
+            <button className="px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg shadow-lg hover:from-purple-700 hover:to-indigo-700 transition-all font-bold text-lg border border-purple-500">
+              🤖 AI Learning System (New!)
+            </button>
+          </Link>
+          <p className="text-sm text-gray-400 mt-2">Create unlimited nested learning paths</p>
+        </div>
+
         {/* External Links */}
         <div className="mb-4 text-center flex gap-3 justify-center">
           <a href="https://www.notion.so/English-Learning-21112dcedf448038b8e1f686d2c8d4c2" target="_blank" rel="noopener noreferrer">
