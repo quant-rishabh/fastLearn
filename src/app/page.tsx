@@ -326,11 +326,6 @@ export default function Home() {
               Home
             </button>
           </Link>
-          <Link href="/workout">
-            <button className="px-4 py-2 bg-orange-600 text-white rounded-lg shadow hover:bg-orange-700 transition-all text-sm font-semibold border border-orange-500 flex items-center gap-2">
-              ⚖️ Weight Loss Tracker
-            </button>
-          </Link>
           <Link href="/settings">
             <button className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg shadow hover:bg-purple-700 hover:text-white transition-all text-sm font-semibold border border-gray-600">
               Settings
@@ -350,34 +345,6 @@ export default function Home() {
       </header>
 
       <div className="max-w-md mx-auto mt-6 px-2">
-        {/* AI Learning System Link */}
-        <div className="mb-6 text-center">
-          <Link href="/learnFromAI">
-            <button className="px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg shadow-lg hover:from-purple-700 hover:to-indigo-700 transition-all font-bold text-lg border border-purple-500">
-              🤖 AI Learning System (New!)
-            </button>
-          </Link>
-          <p className="text-sm text-gray-400 mt-2">Create unlimited nested learning paths</p>
-        </div>
-
-        {/* External Links */}
-        <div className="mb-4 text-center flex gap-3 justify-center">
-          <a href="https://www.notion.so/English-Learning-21112dcedf448038b8e1f686d2c8d4c2" target="_blank" rel="noopener noreferrer">
-            <button className="px-6 py-3 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-all font-semibold border border-blue-500">
-              📖 English Wiki
-            </button>
-          </a>
-          <a href="https://gemini.google.com/app/2e7322f53102b686?hl=en-IN" target="_blank" rel="noopener noreferrer">
-            <button className="px-6 py-3 bg-orange-600 text-white rounded-lg shadow hover:bg-orange-700 transition-all font-semibold border border-orange-500">
-              🎯 JAM Practice
-            </button>
-          </a>
-          <a href="https://gemini.google.com/app/eed54c4485daa4c0?hl=en-IN" target="_blank" rel="noopener noreferrer">
-            <button className="px-6 py-3 bg-green-600 text-white rounded-lg shadow hover:bg-green-700 transition-all font-semibold border border-green-500">
-              🔧 Generate Json
-            </button>
-          </a>
-        </div>
 
         {/* Subject Dropdown */}
         <div className="mb-4">
@@ -448,147 +415,40 @@ export default function Home() {
           </div>
         )}
 
-        {/* Three Mode Selection Buttons */}
-        {subjectSlug && selectedLesson && !selectedMode && (
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold text-purple-300 mb-4 text-center">
-              🎯 What would you like to do?
-            </h3>
-            <div className="grid gap-4">
-              {/* Learn Something New */}
-              <button
-                onClick={() => {
-                  generateAndNavigateToRandomTopic();
-                }}
-                disabled={isGeneratingTopics}
-                className="w-full bg-gradient-to-r from-orange-600 to-red-500 text-white p-4 rounded-lg font-bold shadow hover:scale-105 hover:from-orange-700 hover:to-red-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-              >
-                <span className="text-2xl">🆕</span>
-                <div className="text-left">
-                  <div className="text-lg">{isGeneratingTopics ? 'Getting Random Topic...' : 'Learn Something New'}</div>
-                  <div className="text-sm opacity-90">Jump to a random AI topic</div>
-                </div>
-              </button>
 
-              {/* Review Previous Sessions */}
-              <button
-                onClick={() => {
-                  setSelectedMode('previous');
-                  fetchPreviousSessions();
-                }}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 rounded-lg font-bold shadow hover:scale-105 hover:from-blue-700 hover:to-purple-700 transition-all flex items-center justify-center gap-3"
-              >
-                <span className="text-2xl">📚</span>
-                <div className="text-left">
-                  <div className="text-lg">Review Previous Sessions</div>
-                  <div className="text-sm opacity-90">Topics you've practiced before</div>
-                </div>
-              </button>
 
-              {/* Practice/Drill */}
-              <button
-                onClick={() => setSelectedMode('drill')}
-                className="w-full bg-gradient-to-r from-green-600 to-teal-500 text-white p-4 rounded-lg font-bold shadow hover:scale-105 hover:from-green-700 hover:to-teal-600 transition-all flex items-center justify-center gap-3"
-              >
-                <span className="text-2xl">🎯</span>
-                <div className="text-left">
-                  <div className="text-lg">Practice/Drill</div>
-                  <div className="text-sm opacity-90">Existing curriculum topics</div>
-                </div>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Topic Selection based on Mode */}
-        {selectedMode && (
+        {/* Topic Selection */}
+        {subjectSlug && selectedLesson && topics.length > 0 && (
           <div className="mb-4">
-            <div className="flex items-center justify-between mb-3">
-              <label className="font-medium text-purple-300">
-                {selectedMode === 'previous' && '📚 Previous Session Topics:'}
-                {selectedMode === 'drill' && '📁 Curriculum Topics:'}
-              </label>
-              <button
-                onClick={() => {
-                  setSelectedMode('');
-                  setTopicName('');
-                  setAiTopics([]);
-                  setPreviousTopics([]);
-                }}
-                className="px-3 py-1 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700 transition-all"
-              >
-                ← Back
-              </button>
-            </div>
-
+            <label className="block mb-2 font-medium text-purple-300">📁 Curriculum Topics:</label>
             <select
               value={topicName}
               onChange={(e) => setTopicName(e.target.value)}
               className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 bg-gray-950 text-purple-100 shadow-sm"
             >
               <option value="" className="text-gray-400">-- Choose Topic --</option>
-
-              {/* Previous Session Topics */}
-              {selectedMode === 'previous' && previousTopics.map((topic) => (
-                <option key={topic.id} value={topic.name} className="text-gray-900 bg-blue-100">
-                  📚 {topic.name} ({(topic as any).sessionCount} sessions)
-                </option>
-              ))}
-
-              {/* Curriculum Topics */}
-              {selectedMode === 'drill' && topics.map((topic) => (
+              {topics.map((topic) => (
                 <option key={topic.id} value={topic.name} className="text-gray-900 bg-green-100">
-                  🎯 {topic.name}
+                  {topic.name}
                 </option>
               ))}
             </select>
-
-            {/* Loading/Info Messages */}
-            {selectedMode === 'previous' && previousTopics.length === 0 && !isGeneratingTopics && (
-              <div className="mt-2 text-center text-blue-300">
-                <span>📚 No previous sessions found for this lesson.</span>
-              </div>
-            )}
-
-            {selectedMode === 'drill' && topics.length === 0 && (
-              <div className="mt-2 text-center text-green-300">
-                <span>🎯 No curriculum topics available for this lesson.</span>
-              </div>
-            )}
           </div>
         )}
 
         {/* Action Buttons */}
-        {subjectSlug && selectedLesson && selectedMode && topicName && (
+        {subjectSlug && selectedLesson && topicName && (
           <div className="flex flex-col gap-3 mt-4">
-            {(() => {
-              if (selectedMode === 'previous') {
-                // Direct link to analysis view for previous topics
-                return (
-                  <Link href={`/speaking/analysis/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
-                    <button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-blue-700 hover:to-purple-700 transition-all flex items-center justify-center gap-2">
-                      � View Analysis & Results
-                    </button>
-                  </Link>
-                );
-              } else {
-                // Quiz & Learn for curriculum topics
-                return (
-                  <>
-                    <Link href={`/quiz/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
-                      <button className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all flex items-center justify-center gap-2">
-                        ▶️ Start Quiz
-                      </button>
-                    </Link>
-                    <Link href={`/learn/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
-                      <button className="w-full bg-gradient-to-r from-green-500 to-teal-400 text-gray-900 py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-green-600 hover:to-teal-500 transition-all flex items-center justify-center gap-2">
-                        📖 Learn
-                      </button>
-                    </Link>
-                  </>
-                );
-              }
-            })()}
+            <Link href={`/quiz/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
+              <button className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all flex items-center justify-center gap-2">
+                ▶️ Start Quiz
+              </button>
+            </Link>
+            <Link href={`/learn/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
+              <button className="w-full bg-gradient-to-r from-green-500 to-teal-400 text-gray-900 py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-green-600 hover:to-teal-500 transition-all flex items-center justify-center gap-2">
+                📖 Learn
+              </button>
+            </Link>
           </div>
         )}
       </div>
