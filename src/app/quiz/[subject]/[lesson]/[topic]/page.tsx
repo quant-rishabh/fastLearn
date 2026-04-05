@@ -61,6 +61,7 @@ export default function QuizPage() {
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [micReady, setMicReady] = useState(false); // Track if mic is pre-acquired
   const finishedRef = useRef<boolean>(false);
   
   // OpenAI Whisper STT refs
@@ -192,6 +193,36 @@ useEffect(() => {
     loadQuiz();
   }, [subject, lesson, topic]);
 
+  // Function to pre-acquire microphone (keeps it warm for instant recording)
+  const initializeMicrophone = async () => {
+    if (streamRef.current) {
+      console.log('🎤 Microphone already initialized');
+      return true;
+    }
+    
+    try {
+      console.log('🎤 Pre-acquiring microphone...');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      setMicReady(true);
+      console.log('🎤 Microphone ready for instant recording!');
+      return true;
+    } catch (error) {
+      console.error('🎤 Failed to acquire microphone:', error);
+      return false;
+    }
+  };
+
+  // Release microphone stream
+  const releaseMicrophone = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+      setMicReady(false);
+      console.log('🎤 Microphone released');
+    }
+  };
+
   // Speech recognition setup - Whisper only (hold-to-speak)
   useEffect(() => {
     // Check if MediaRecorder is supported (for OpenAI Whisper STT)
@@ -203,6 +234,8 @@ useEffect(() => {
     if (hasMediaDevices) {
       setSpeechSupported(true);
       console.log('🎤 Whisper STT: MediaRecorder supported (hold-to-speak)');
+      // Pre-acquire microphone for instant recording
+      initializeMicrophone();
     } else {
       console.log('MediaRecorder not supported. User agent:', navigator.userAgent);
       setSpeechSupported(false);
@@ -213,9 +246,7 @@ useEffect(() => {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop();
       }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
+      releaseMicrophone();
     };
   }, []);
 
@@ -255,16 +286,25 @@ useEffect(() => {
     }
   };
 
-  // Hold-to-speak: Start recording on press
+  // Hold-to-speak: Start recording on press (instant if mic is pre-acquired)
   const startHoldToSpeak = async () => {
     if (isListening || isTranscribing) return;
     
     try {
       console.log('🎤 Hold-to-speak: Starting recording...');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
       
-      const mediaRecorder = new MediaRecorder(stream, {
+      // If mic not ready, acquire it now (first time only)
+      if (!streamRef.current) {
+        console.log('🎤 Mic not ready, acquiring now...');
+        const success = await initializeMicrophone();
+        if (!success) {
+          alert('🎤 Microphone permission denied. Please enable microphone access.');
+          return;
+        }
+      }
+      
+      // Create MediaRecorder with pre-acquired stream (instant!)
+      const mediaRecorder = new MediaRecorder(streamRef.current!, {
         mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
       });
       mediaRecorderRef.current = mediaRecorder;
@@ -279,22 +319,24 @@ useEffect(() => {
       // Start recording immediately
       mediaRecorder.start(100); // Capture in 100ms chunks for fast response
       setIsListening(true);
-      console.log('🎤 Recording started - speak now!');
+      console.log('🎤 Recording started instantly - speak now!');
       
     } catch (error) {
       console.error('🎤 Failed to start recording:', error);
-      alert('🎤 Microphone permission denied. Please enable microphone access.');
+      // Stream might be stale, try to re-acquire
+      releaseMicrophone();
+      alert('🎤 Microphone error. Please try again.');
     }
   };
 
-  // Hold-to-speak: Stop recording on release and transcribe
+  // Hold-to-speak: Stop recording on release and transcribe (keeps mic warm)
   const stopHoldToSpeak = async () => {
     if (!isListening) return;
     
     console.log('🎤 Hold-to-speak: Stopping and transcribing...');
     setIsListening(false);
     
-    // Stop MediaRecorder
+    // Stop MediaRecorder (but keep stream alive for next recording!)
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
     }
@@ -320,14 +362,9 @@ useEffect(() => {
       }
     }
     
-    // Clear chunks
+    // Clear chunks (but keep stream alive for instant next recording!)
     audioChunksRef.current = [];
-    
-    // Stop all tracks
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
+    // NOTE: We do NOT stop the stream here - it stays warm for the next recording
   };
 
   // Function to handle navigation and cleanup
@@ -335,6 +372,8 @@ useEffect(() => {
     if (isListening) {
       stopHoldToSpeak();
     }
+    // Release microphone when leaving the page
+    releaseMicrophone();
   };
 
 const spokenIndexRef = useRef<number | null>(null);
