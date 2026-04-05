@@ -68,6 +68,7 @@ export default function QuizPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const isRecordingRef = useRef<boolean>(false); // Synchronous recording state (fixes async state issues)
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -288,7 +289,8 @@ useEffect(() => {
 
   // Hold-to-speak: Start recording on press (instant if mic is pre-acquired)
   const startHoldToSpeak = async () => {
-    if (isListening || isTranscribing) return;
+    // Use ref for synchronous check (prevents race conditions)
+    if (isRecordingRef.current || isTranscribing) return;
     
     // Vibrate on press (Android only, iOS ignores silently)
     if (navigator.vibrate) {
@@ -323,12 +325,14 @@ useEffect(() => {
       
       // Start recording immediately
       mediaRecorder.start(100); // Capture in 100ms chunks for fast response
-      setIsListening(true);
+      isRecordingRef.current = true; // Set ref FIRST (synchronous)
+      setIsListening(true); // Then update state (async)
       console.log('🎤 Recording started instantly - speak now!');
       
     } catch (error) {
       console.error('🎤 Failed to start recording:', error);
       // Stream might be stale, try to re-acquire
+      isRecordingRef.current = false;
       releaseMicrophone();
       alert('🎤 Microphone error. Please try again.');
     }
@@ -336,7 +340,12 @@ useEffect(() => {
 
   // Hold-to-speak: Stop recording on release and transcribe (keeps mic warm)
   const stopHoldToSpeak = async () => {
-    if (!isListening) return;
+    // Use ref for synchronous check (prevents double-stop and race conditions)
+    if (!isRecordingRef.current) return;
+    
+    // Immediately mark as not recording (synchronous)
+    isRecordingRef.current = false;
+    setIsListening(false);
     
     // Vibrate on release (Android only, iOS ignores silently)
     if (navigator.vibrate) {
@@ -344,7 +353,6 @@ useEffect(() => {
     }
     
     console.log('🎤 Hold-to-speak: Stopping and transcribing...');
-    setIsListening(false);
     
     // Stop MediaRecorder (but keep stream alive for next recording!)
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
@@ -624,34 +632,33 @@ const clearInputAndSpeech = () => {
     }
   };
 
-  // Add this function to play audio from OpenAI TTS
+  // Play audio from OpenAI TTS (streaming for faster playback)
   async function playOpenAITTS(text: string, voice = 'alloy') {
-    console.log('🔊 playOpenAITTS called with text:', text, 'voice:', voice);
+    console.log('🔊 playOpenAITTS called with text:', text?.substring(0, 50));
     try {
       const res = await fetch('/api/tts-openai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, voice }),
       });
-      console.log('🔊 API response status:', res.status, res.statusText);
+      
       if (!res.ok) {
-        console.error('🔊 Failed to fetch audio, status:', res.status);
-        alert('Failed to fetch audio');
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('🔊 TTS error:', errorData.error);
         return;
       }
-      const data = await res.json();
-      console.log('🔊 API response data:', data);
-      if (data.audioContent) {
-        console.log('🔊 Audio content received, length:', data.audioContent.length);
-        const audio = new Audio('data:audio/mp3;base64,' + data.audioContent);
-        audio.play().then(() => {
-          console.log('🔊 Audio playing successfully');
-        }).catch((err) => {
-          console.error('🔊 Audio play error:', err);
-        });
-      } else {
-        console.warn('🔊 No audioContent in response');
-      }
+      
+      // Stream audio directly (faster than base64)
+      const audioBlob = await res.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      
+      // Clean up blob URL after playback
+      audio.onended = () => URL.revokeObjectURL(audioUrl);
+      audio.onerror = () => URL.revokeObjectURL(audioUrl);
+      
+      await audio.play();
+      console.log('🔊 Audio playing');
     } catch (error) {
       console.error('🔊 playOpenAITTS error:', error);
     }
@@ -1006,16 +1013,26 @@ const clearInputAndSpeech = () => {
                     }`}
                     rows={3}
                   />
-                  {/* Hold-to-Speak Mic Button */}
+                  {/* Hold-to-Speak Mic Button - Using Pointer Events for unified touch/mouse handling */}
                   {speechSupported && (
                     <button
-                      onMouseDown={startHoldToSpeak}
-                      onMouseUp={stopHoldToSpeak}
-                      onMouseLeave={() => { if (isListening) stopHoldToSpeak(); }}
-                      onTouchStart={(e) => { e.preventDefault(); startHoldToSpeak(); }}
-                      onTouchEnd={(e) => { e.preventDefault(); stopHoldToSpeak(); }}
-                      onTouchCancel={(e) => { e.preventDefault(); stopHoldToSpeak(); }}
-                      onTouchMove={(e) => { e.preventDefault(); }}
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+                        startHoldToSpeak();
+                      }}
+                      onPointerUp={(e) => {
+                        e.preventDefault();
+                        stopHoldToSpeak();
+                      }}
+                      onPointerCancel={(e) => {
+                        e.preventDefault();
+                        stopHoldToSpeak();
+                      }}
+                      onPointerLeave={(e) => {
+                        // Only stop if we're recording and pointer left without releasing
+                        if (isRecordingRef.current) stopHoldToSpeak();
+                      }}
                       onContextMenu={(e) => e.preventDefault()}
                       disabled={isTranscribing}
                       className={`flex-shrink-0 w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 select-none touch-none ${
