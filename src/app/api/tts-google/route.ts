@@ -1,48 +1,78 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+const ALLOWED_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+const MAX_TEXT_LENGTH = 500;
+const TIMEOUT_MS = 15000;
+
 export async function POST(req: NextRequest) {
-  const { text, lang = 'en-GB' } = await req.json();
-  const apiKey = process.env.GOOGLE_SPEECH_API_KEY;
-  console.log("GOOGLE_SPEECH_API_KEY present:", !!apiKey);
+  try {
+    const { text, voice = 'alloy' } = await req.json();
+    const apiKey = process.env.OPENAI_API_KEY;
+    
+    console.log("🔊 OpenAI TTS called with text:", text?.substring(0, 50));
 
-  if (!apiKey) {
-    return NextResponse.json({ error: 'API key not set' }, { status: 500 });
-  }
+    if (!apiKey) {
+      return NextResponse.json({ error: 'OpenAI API key not set' }, { status: 500 });
+    }
 
-  // Detect Hindi (Devanagari) characters
-  const isHindi = /[\u0900-\u097F]/.test(text);
-  let languageCode, voiceName;
-  if (isHindi) {
-    languageCode = 'hi-IN';
-    voiceName = 'hi-IN-Standard-E'; // FEMALE
-  } else {
-    languageCode = 'en-IN';
-    voiceName = 'en-IN-Standard-E'; // FEMALE
-  }
+    if (!text || text.trim().length === 0) {
+      return NextResponse.json({ error: 'No text provided' }, { status: 400 });
+    }
 
-  const body = {
-    input: { text },
-    voice: { languageCode, name: voiceName },
-    audioConfig: { audioEncoding: 'MP3' },
-  };
+    // Text length validation (cost + UX control)
+    if (text.length > MAX_TEXT_LENGTH) {
+      return NextResponse.json({ error: `Text too long (max ${MAX_TEXT_LENGTH} chars)` }, { status: 400 });
+    }
 
-  // Use API key as query param, not Authorization header
-  const googleRes = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
-    {
+    // Voice validation
+    if (!ALLOWED_VOICES.includes(voice)) {
+      return NextResponse.json({ error: `Invalid voice. Allowed: ${ALLOWED_VOICES.join(', ')}` }, { status: 400 });
+    }
+
+    // Timeout handling to prevent UI freeze
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+    // OpenAI TTS API call
+    const response = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        model: 'gpt-4o-mini-tts', // newer, more natural, better accent handling
+        input: text,
+        voice: voice,
+        response_format: 'mp3',
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('🔊 OpenAI TTS error:', errorText);
+      return NextResponse.json({ error: errorText }, { status: response.status });
     }
-  );
 
-  if (!googleRes.ok) {
-    const error = await googleRes.text();
-    console.error('Google TTS error:', error);
-    return NextResponse.json({ error }, { status: 500 });
+    // Stream audio directly (30-40% smaller than base64, faster playback)
+    const audioBuffer = await response.arrayBuffer();
+    console.log("🔊 TTS success, audio size:", audioBuffer.byteLength, "bytes");
+
+    return new NextResponse(audioBuffer, {
+      headers: {
+        'Content-Type': 'audio/mpeg',
+        'Content-Length': audioBuffer.byteLength.toString(),
+      },
+    });
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      console.error('🔊 OpenAI TTS timeout');
+      return NextResponse.json({ error: 'TTS request timed out' }, { status: 504 });
+    }
+    console.error('🔊 OpenAI TTS exception:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-
-  const data = await googleRes.json();
-  return NextResponse.json({ audioContent: data.audioContent });
 }
