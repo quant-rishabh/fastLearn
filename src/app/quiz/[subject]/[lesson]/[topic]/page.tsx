@@ -1014,16 +1014,18 @@ const clearInputAndSpeech = () => {
                       onMouseLeave={() => { if (isListening) stopHoldToSpeak(); }}
                       onTouchStart={(e) => { e.preventDefault(); startHoldToSpeak(); }}
                       onTouchEnd={(e) => { e.preventDefault(); stopHoldToSpeak(); }}
+                      onTouchCancel={(e) => { e.preventDefault(); stopHoldToSpeak(); }}
+                      onTouchMove={(e) => { e.preventDefault(); }}
                       onContextMenu={(e) => e.preventDefault()}
                       disabled={isTranscribing}
-                      className={`flex-shrink-0 w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 select-none ${
+                      className={`flex-shrink-0 w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 select-none touch-none ${
                         isTranscribing
                           ? 'bg-yellow-600 text-white cursor-wait'
                           : isListening
                             ? 'bg-red-600 text-white shadow-lg scale-110 animate-pulse'
                             : 'bg-purple-700 text-white hover:bg-purple-600 active:bg-red-600'
                       }`}
-                      style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                      style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', touchAction: 'none' }}
                       title={isTranscribing ? 'Transcribing...' : isListening ? 'Release to stop' : 'Hold to speak'}
                     >
                       {isTranscribing ? (
