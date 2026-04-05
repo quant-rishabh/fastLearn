@@ -642,20 +642,29 @@ const clearInputAndSpeech = () => {
         body: JSON.stringify({ text, voice }),
       });
       
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('🔊 TTS error:', errorData.error);
+      // Debug: Check what content type we got
+      const contentType = res.headers.get('content-type');
+      console.log('🔊 Response content-type:', contentType);
+      
+      // If not OK or not audio, it's an error response
+      if (!res.ok || !contentType?.includes('audio')) {
+        const errorText = await res.text();
+        console.error('🔊 TTS error:', errorText);
         return;
       }
       
-      // Stream audio directly (faster than base64)
-      const audioBlob = await res.blob();
+      // Get blob and explicitly set MIME type (fixes iOS/Safari issues)
+      const blob = await res.blob();
+      const audioBlob = new Blob([blob], { type: 'audio/mpeg' });
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
       
       // Clean up blob URL after playback
       audio.onended = () => URL.revokeObjectURL(audioUrl);
-      audio.onerror = () => URL.revokeObjectURL(audioUrl);
+      audio.onerror = (e) => {
+        console.error('🔊 Audio playback error:', e);
+        URL.revokeObjectURL(audioUrl);
+      };
       
       await audio.play();
       console.log('🔊 Audio playing');
