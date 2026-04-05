@@ -290,6 +290,11 @@ useEffect(() => {
   const startHoldToSpeak = async () => {
     if (isListening || isTranscribing) return;
     
+    // Vibrate on press (Android only, iOS ignores silently)
+    if (navigator.vibrate) {
+      navigator.vibrate(50);
+    }
+    
     try {
       console.log('🎤 Hold-to-speak: Starting recording...');
       
@@ -332,6 +337,11 @@ useEffect(() => {
   // Hold-to-speak: Stop recording on release and transcribe (keeps mic warm)
   const stopHoldToSpeak = async () => {
     if (!isListening) return;
+    
+    // Vibrate on release (Android only, iOS ignores silently)
+    if (navigator.vibrate) {
+      navigator.vibrate(30);
+    }
     
     console.log('🎤 Hold-to-speak: Stopping and transcribing...');
     setIsListening(false);
@@ -1004,14 +1014,16 @@ const clearInputAndSpeech = () => {
                       onMouseLeave={() => { if (isListening) stopHoldToSpeak(); }}
                       onTouchStart={(e) => { e.preventDefault(); startHoldToSpeak(); }}
                       onTouchEnd={(e) => { e.preventDefault(); stopHoldToSpeak(); }}
+                      onContextMenu={(e) => e.preventDefault()}
                       disabled={isTranscribing}
-                      className={`flex-shrink-0 w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 ${
+                      className={`flex-shrink-0 w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 select-none ${
                         isTranscribing
                           ? 'bg-yellow-600 text-white cursor-wait'
                           : isListening
                             ? 'bg-red-600 text-white shadow-lg scale-110 animate-pulse'
                             : 'bg-purple-700 text-white hover:bg-purple-600 active:bg-red-600'
                       }`}
+                      style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
                       title={isTranscribing ? 'Transcribing...' : isListening ? 'Release to stop' : 'Hold to speak'}
                     >
                       {isTranscribing ? (
