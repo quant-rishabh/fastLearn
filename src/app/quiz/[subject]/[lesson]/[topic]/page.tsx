@@ -57,18 +57,15 @@ export default function QuizPage() {
   // Mobile detection - calculate once to prevent repeated checks
   const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   
-  // Speech recognition states
+  // Speech recognition states - Whisper only (hold-to-speak)
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
-  const [globalSpeechEnabled, setGlobalSpeechEnabled] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const recognitionRef = useRef<any>(null);
   const finishedRef = useRef<boolean>(false);
   
   // OpenAI Whisper STT refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -195,12 +192,8 @@ useEffect(() => {
     loadQuiz();
   }, [subject, lesson, topic]);
 
-  // Speech recognition setup - Using OpenAI Whisper
+  // Speech recognition setup - Whisper only (hold-to-speak)
   useEffect(() => {
-    // Load global speech setting from localStorage
-    const savedGlobalSpeech = localStorage.getItem('global_speech_enabled') === 'true';
-    setGlobalSpeechEnabled(savedGlobalSpeech);
-    
     // Check if MediaRecorder is supported (for OpenAI Whisper STT)
     const hasMediaDevices = typeof window !== 'undefined' && 
       typeof navigator !== 'undefined' && 
@@ -209,7 +202,7 @@ useEffect(() => {
     
     if (hasMediaDevices) {
       setSpeechSupported(true);
-      console.log('🎤 OpenAI Whisper STT supported via MediaRecorder');
+      console.log('🎤 Whisper STT: MediaRecorder supported (hold-to-speak)');
     } else {
       console.log('MediaRecorder not supported. User agent:', navigator.userAgent);
       setSpeechSupported(false);
@@ -219,9 +212,6 @@ useEffect(() => {
     return () => {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop();
-      }
-      if (recordingIntervalRef.current) {
-        clearInterval(recordingIntervalRef.current);
       }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
@@ -265,10 +255,12 @@ useEffect(() => {
     }
   };
 
-  // Start OpenAI Whisper recording - records continuously until submit
-  const startWhisperRecording = async () => {
+  // Hold-to-speak: Start recording on press
+  const startHoldToSpeak = async () => {
+    if (isListening || isTranscribing) return;
+    
     try {
-      console.log('🎤 Starting Whisper recording (continuous mode)...');
+      console.log('🎤 Hold-to-speak: Starting recording...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       
@@ -281,91 +273,68 @@ useEffect(() => {
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
-          console.log('🎤 Audio chunk added, total chunks:', audioChunksRef.current.length);
         }
       };
       
-      // Request data every 1 second to keep collecting chunks
-      mediaRecorder.start(1000);
+      // Start recording immediately
+      mediaRecorder.start(100); // Capture in 100ms chunks for fast response
       setIsListening(true);
-      console.log('🎤 Whisper recording started - mic stays open until submit');
+      console.log('🎤 Recording started - speak now!');
       
     } catch (error) {
       console.error('🎤 Failed to start recording:', error);
-      alert('🎤 Microphone permission denied. Please enable microphone access in your browser settings.');
+      alert('🎤 Microphone permission denied. Please enable microphone access.');
     }
   };
 
-  // Get current recording as blob without stopping
-  const getCurrentRecordingBlob = (): Blob => {
-    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-    console.log('🎤 Getting current recording, size:', audioBlob.size, 'chunks:', audioChunksRef.current.length);
-    return audioBlob;
-  };
-
-  // Transcribe current recording and return transcript
-  const transcribeCurrentRecording = async (): Promise<string> => {
-    const audioBlob = getCurrentRecordingBlob();
-    if (audioBlob.size === 0) {
-      return '';
-    }
-    const transcript = await transcribeWithWhisper(audioBlob);
-    // Clear chunks after transcription
-    audioChunksRef.current = [];
-    return transcript;
-  };
-
-  // Stop OpenAI Whisper recording completely
-  const stopWhisperRecording = () => {
-    console.log('🎤 Stopping Whisper recording...');
+  // Hold-to-speak: Stop recording on release and transcribe
+  const stopHoldToSpeak = async () => {
+    if (!isListening) return;
     
-    if (recordingIntervalRef.current) {
-      clearInterval(recordingIntervalRef.current);
-      recordingIntervalRef.current = null;
-    }
+    console.log('🎤 Hold-to-speak: Stopping and transcribing...');
+    setIsListening(false);
     
+    // Stop MediaRecorder
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
     }
+    
+    // Wait a bit for final chunks
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    // Get and transcribe audio
+    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+    console.log('🎤 Audio blob size:', audioBlob.size);
+    
+    if (audioBlob.size > 0) {
+      const transcript = await transcribeWithWhisper(audioBlob);
+      
+      if (transcript && transcript.trim()) {
+        // Append to existing text
+        setInputValue(prev => {
+          const newValue = prev ? `${prev} ${transcript}`.trim() : transcript;
+          transcriptRef.current = newValue;
+          return newValue;
+        });
+        console.log('🎤 Transcript appended:', transcript);
+      }
+    }
+    
+    // Clear chunks
+    audioChunksRef.current = [];
     
     // Stop all tracks
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
-    
-    setIsListening(false);
   };
 
-  // Effect to manage speech recording based on globalSpeechEnabled
-  useEffect(() => {
-    if (!speechSupported) return;
-    
-    if (globalSpeechEnabled && !finished && !isListening) {
-      startWhisperRecording();
-    } else if (!globalSpeechEnabled && isListening) {
-      stopWhisperRecording();
-    }
-  }, [globalSpeechEnabled, finished, speechSupported]);
-
-
-
-  // Function to handle navigation and cleanup speech recognition
+  // Function to handle navigation and cleanup
   const handleNavigateHome = () => {
-    // Stop and disable global speech when navigating away
-    if (globalSpeechEnabled) {
-      setGlobalSpeechEnabled(false);
-      localStorage.setItem('global_speech_enabled', 'false');
-      stopWhisperRecording();
+    if (isListening) {
+      stopHoldToSpeak();
     }
-  };
-
-  // Simple speech recognition toggle - no auto management
-  const toggleGlobalSpeech = () => {
-    const newValue = !globalSpeechEnabled;
-    
-    setGlobalSpeechEnabled(newValue);
-    localStorage.setItem('global_speech_enabled', newValue.toString());
   };
 
 const spokenIndexRef = useRef<number | null>(null);
@@ -407,11 +376,10 @@ useEffect(() => {
 
 
   // Add this function to clear both input and speech buffer
-// ⬇️ add the highlighted line
 const clearInputAndSpeech = () => {
   setInputValue('');
   setSpeechTranscript('');
-  transcriptRef.current = '';          // 🔑 reset running transcript
+  transcriptRef.current = '';          // Reset running transcript
   audioChunksRef.current = [];         // Clear audio chunks for Whisper
 };
 
@@ -518,18 +486,13 @@ const clearInputAndSpeech = () => {
   // Clear both input and speech buffer
   clearInputAndSpeech();
 
-  // Stop Whisper recording before changing question
-  if (globalSpeechEnabled && speechSupported && isListening) {
-    stopWhisperRecording();
+  // Stop any ongoing recording
+  if (isListening) {
+    stopHoldToSpeak();
   }
 
   if (remainingQuestions.length === 0) {
     setFinished(true);
-    if (globalSpeechEnabled) {
-      setGlobalSpeechEnabled(false);
-      localStorage.setItem('global_speech_enabled', 'false');
-      stopWhisperRecording();
-    }
     return;
   }
 
@@ -537,9 +500,6 @@ const clearInputAndSpeech = () => {
 
   setTimeout(() => {
     inputRef.current?.focus();
-    if (globalSpeechEnabled && speechSupported && !isListening) {
-      startWhisperRecording();
-    }
   }, 100);
 };
 
@@ -548,26 +508,13 @@ const clearInputAndSpeech = () => {
   const handleSubmit = async (overrideAnswers?: string[]) => {
     setTimerActive(false);
     
-    // If mic is recording, transcribe the audio first
+    // With hold-to-speak, transcription happens on release, so inputValue already has the text
     let finalAnswers = overrideAnswers || userAnswers;
-    if (isListening && audioChunksRef.current.length > 0) {
-      console.log('🎤 Transcribing before submit...');
-      const transcript = await transcribeCurrentRecording();
-      if (transcript && transcript.trim()) {
-        // If user typed something, append transcript; otherwise use transcript alone
-        const trimmedTranscript = transcript.trim().toLowerCase();
-        if (finalAnswers.length > 0) {
-          // Append as additional answer if not already included
-          if (!finalAnswers.includes(trimmedTranscript)) {
-            finalAnswers = [...finalAnswers, trimmedTranscript];
-          }
-        } else {
-          // Use transcript as the answer
-          finalAnswers = [trimmedTranscript];
-        }
-        setUserAnswers(finalAnswers);
-        setInputValue(transcript);
-      }
+    
+    // If no answers but there's text in input, use that
+    if (finalAnswers.length === 0 && inputValue.trim()) {
+      finalAnswers = [inputValue.trim().toLowerCase()];
+      setUserAnswers(finalAnswers);
     }
     
     const correctAnswer = questions[currentIndex]?.answer;
@@ -691,30 +638,13 @@ const clearInputAndSpeech = () => {
     if (timeLeft <= 0) {
       setTimerActive(false);
       
-      // If recording, transcribe and submit
-      if (isListening && audioChunksRef.current.length > 0) {
-        (async () => {
-          const transcript = await transcribeCurrentRecording();
-          if (transcript && transcript.trim()) {
-            // Submit with transcribed answer
-            handleSubmit([transcript.trim().toLowerCase()]);
-          } else {
-            // No answer from voice, mark as wrong
-            setHasSubmitted(true);
-            setIsCorrect(false);
-            setWrongAnswers((prev) => [
-              ...prev,
-              {
-                question: questions[currentIndex].question,
-                correct: questions[currentIndex].answer,
-                user: userAnswers.join(', ') || '[No answer]',
-                note: questions[currentIndex].note || '',
-              },
-            ]);
-          }
-        })();
-      } else if (userAnswers.length > 0 || inputValue.trim()) {
-        // User has typed something, submit it
+      // Stop any ongoing recording
+      if (isListening) {
+        stopHoldToSpeak();
+      }
+      
+      // If user has typed/spoken something, submit it
+      if (userAnswers.length > 0 || inputValue.trim()) {
         const finalAnswers = userAnswers.length > 0 ? userAnswers : [inputValue.trim().toLowerCase()];
         handleSubmit(finalAnswers);
       } else {
@@ -910,31 +840,6 @@ const clearInputAndSpeech = () => {
           >
             ← Back to Home
           </Link>
-          
-          {/* Global Speech Toggle */}
-          {speechSupported && (
-            <button
-              onClick={toggleGlobalSpeech}
-              disabled={isTranscribing}
-              className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium transition-all duration-200 ${
-                isTranscribing
-                  ? 'bg-yellow-600 text-white animate-pulse'
-                  : isListening
-                    ? 'bg-red-600 text-white shadow-lg animate-pulse'
-                    : globalSpeechEnabled
-                      ? 'bg-green-600 text-white shadow-lg'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-              title={isTranscribing ? 'Transcribing...' : isListening ? '🔴 Recording... (speak your answer)' : globalSpeechEnabled ? 'Disable voice input (OpenAI Whisper)' : 'Enable voice input (OpenAI Whisper)'}
-            >
-              {isListening && <span className="w-2 h-2 bg-white rounded-full animate-ping"></span>}
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-              </svg>
-              <span>{isTranscribing ? '...' : isListening ? 'REC' : globalSpeechEnabled ? 'ON' : 'OFF'}</span>
-            </button>
-          )}
         </div>
 
         {/* Breadcrumb */}
@@ -1029,26 +934,73 @@ const clearInputAndSpeech = () => {
                 })}
               </div>
               <div className="flex flex-col gap-2 mb-4">
-                <textarea
-                  ref={inputRef}
-                  value={inputValue}
-                  onChange={(e) => {
-                    setInputValue(e.target.value);
-                    transcriptRef.current = e.target.value;
-                  }}
-                  onKeyDown={(e) => {
-                    if (totalExpected === 1 && e.key === 'Enter' && inputValue.trim()) {
-                      e.preventDefault();
-                      setUserAnswers([inputValue.trim().toLowerCase()]);
-                      handleSubmit([inputValue.trim().toLowerCase()]);
-                    } else {
-                      handleInputKeyDown(e);
-                    }
-                  }}
-                  placeholder={`Type answer${totalExpected > 1 ? ' and press Enter/Add' : ''}`}
-                  className="w-full p-3 border border-gray-700 rounded-lg bg-gray-900 text-gray-100 focus:ring-2 focus:ring-purple-500 shadow resize-none min-h-[80px] text-base leading-relaxed"
-                  rows={3}
-                />
+                <div className="flex gap-2">
+                  <textarea
+                    ref={inputRef}
+                    value={inputValue}
+                    onChange={(e) => {
+                      setInputValue(e.target.value);
+                      transcriptRef.current = e.target.value;
+                    }}
+                    onKeyDown={(e) => {
+                      if (totalExpected === 1 && e.key === 'Enter' && inputValue.trim()) {
+                        e.preventDefault();
+                        setUserAnswers([inputValue.trim().toLowerCase()]);
+                        handleSubmit([inputValue.trim().toLowerCase()]);
+                      } else {
+                        handleInputKeyDown(e);
+                      }
+                    }}
+                    placeholder={`Type or hold mic to speak...`}
+                    className={`flex-1 p-3 border rounded-lg bg-gray-900 text-gray-100 focus:ring-2 focus:ring-purple-500 shadow resize-none min-h-[80px] text-base leading-relaxed ${
+                      isListening ? 'border-red-500 border-2' : 'border-gray-700'
+                    }`}
+                    rows={3}
+                  />
+                  {/* Hold-to-Speak Mic Button */}
+                  {speechSupported && (
+                    <button
+                      onMouseDown={startHoldToSpeak}
+                      onMouseUp={stopHoldToSpeak}
+                      onMouseLeave={() => { if (isListening) stopHoldToSpeak(); }}
+                      onTouchStart={(e) => { e.preventDefault(); startHoldToSpeak(); }}
+                      onTouchEnd={(e) => { e.preventDefault(); stopHoldToSpeak(); }}
+                      disabled={isTranscribing}
+                      className={`flex-shrink-0 w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 ${
+                        isTranscribing
+                          ? 'bg-yellow-600 text-white cursor-wait'
+                          : isListening
+                            ? 'bg-red-600 text-white shadow-lg scale-110 animate-pulse'
+                            : 'bg-purple-700 text-white hover:bg-purple-600 active:bg-red-600'
+                      }`}
+                      title={isTranscribing ? 'Transcribing...' : isListening ? 'Release to stop' : 'Hold to speak'}
+                    >
+                      {isTranscribing ? (
+                        <span className="animate-spin text-xl">⏳</span>
+                      ) : isListening ? (
+                        <span className="text-2xl">🔴</span>
+                      ) : (
+                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                        </svg>
+                      )}
+                    </button>
+                  )}
+                </div>
+                {/* Recording indicator */}
+                {isListening && (
+                  <div className="flex items-center gap-2 text-xs text-red-400">
+                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                    <span>🎤 Recording... Release to transcribe</span>
+                  </div>
+                )}
+                {isTranscribing && (
+                  <div className="flex items-center gap-2 text-xs text-yellow-400">
+                    <span className="animate-spin">⏳</span>
+                    <span>Transcribing with Whisper...</span>
+                  </div>
+                )}
                 {/* Show Add button only if multiple answers and not last answer */}
                 {totalExpected > 1 && userAnswers.length < totalExpected - 1 && (
                   <button
