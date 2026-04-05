@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { supabase } from '@/utils/supabase';
 
 // Toast for feedback
 function Toast({ message, show }: { message: string; show: boolean }) {
@@ -12,34 +13,56 @@ function Toast({ message, show }: { message: string; show: boolean }) {
   ) : null;
 }
 
-export default function SettingsPage() {
-  const [threshold, setThreshold] = useState(0.3);
-  const [shuffleEnabled, setShuffleEnabled] = useState(false);
-  const [autoSpeak, setAutoSpeak] = useState(false);
-  const [autoSpeakAnswer, setAutoSpeakAnswer] = useState(false);
+interface Subject {
+  id: string;
+  label: string;
+  slug: string;
+}
+
+interface Lesson {
+  id: string;
+  name: string;
+  subject_id: string;
+}
+
+interface Topic {
+  id: string;
+  name: string;
+  lesson_id: string;
+  isAiGenerated?: boolean;
+}
+
+export default function Home() {
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjectSlug, setSubjectSlug] = useState('');
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [selectedLesson, setSelectedLesson] = useState('');
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [topicName, setTopicName] = useState('');
   const [fetchFromDb, setFetchFromDb] = useState(true);
-  const [timerSeconds, setTimerSeconds] = useState(20);
-  const [practiceCount, setPracticeCount] = useState(2);
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+  const [isGeneratingTopics, setIsGeneratingTopics] = useState(false);
+  const [aiTopics, setAiTopics] = useState<Topic[]>([]);
+  const [previousTopics, setPreviousTopics] = useState<Topic[]>([]);
+  const [selectedMode, setSelectedMode] = useState<'previous' | 'drill' | ''>('');
 
-  // Load settings from localStorage on mount
   useEffect(() => {
-    const storedThreshold = localStorage.getItem('fuzzy_threshold');
-    const storedShuffle = localStorage.getItem('shuffle_enabled');
-    const storedAutoSpeak = localStorage.getItem('auto_speak');
-    const storedAutoSpeakAnswer = localStorage.getItem('auto_speak_answer');
-    const storedFetchDb = localStorage.getItem('fetch_from_db');
-    const storedTimer = localStorage.getItem('quiz_timer_seconds');
-    const storedPractice = localStorage.getItem('practice_count');
+    const stored = localStorage.getItem('fetch_from_db');
+    if (stored) setFetchFromDb(stored === 'true');
+  }, []);
 
-    if (storedThreshold) setThreshold(parseFloat(storedThreshold));
-    if (storedShuffle) setShuffleEnabled(storedShuffle === 'true');
-    if (storedAutoSpeak) setAutoSpeak(storedAutoSpeak === 'true');
-    if (storedAutoSpeakAnswer) setAutoSpeakAnswer(storedAutoSpeakAnswer === 'true');
-    if (storedFetchDb) setFetchFromDb(storedFetchDb === 'true');
-    if (storedTimer) setTimerSeconds(Number(storedTimer));
-    if (storedPractice) setPracticeCount(Number(storedPractice));
+  // Load previously selected subject and lesson on component mount
+  useEffect(() => {
+    const savedSubject = localStorage.getItem('lastSelectedSubject');
+    const savedLesson = localStorage.getItem('lastSelectedLesson');
+    
+    if (savedSubject) {
+      setSubjectSlug(savedSubject);
+    }
+    if (savedLesson) {
+      setSelectedLesson(savedLesson);
+    }
   }, []);
 
   const handleToggleDbFetch = (val: boolean) => {
@@ -47,48 +70,274 @@ export default function SettingsPage() {
     localStorage.setItem('fetch_from_db', String(val));
   };
 
-  const handleSaveSettings = () => {
-    localStorage.setItem('fuzzy_threshold', threshold.toString());
-    localStorage.setItem('shuffle_enabled', shuffleEnabled.toString());
-    localStorage.setItem('auto_speak', String(autoSpeak));
-    localStorage.setItem('auto_speak_answer', String(autoSpeakAnswer));
-    localStorage.setItem('fetch_from_db', String(fetchFromDb));
-    localStorage.setItem('quiz_timer_seconds', timerSeconds.toString());
-    localStorage.setItem('practice_count', practiceCount.toString());
-    setToastMsg('✅ Settings saved!');
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 2000);
-  };
+  // Load subjects
+  useEffect(() => {
+    const loadSubjects = async () => {
+      const fetchFromDb = localStorage.getItem('fetch_from_db') === 'true';
 
-  const handleClearStorage = () => {
-    if (confirm('⚠️ Are you sure you want to clear all cached data? This cannot be undone.')) {
-      localStorage.clear();
-      setToastMsg('🧹 LocalStorage cleared!');
+      // Cache Mode: Use cache if available, only fetch if cache is empty
+      if (!fetchFromDb) {
+        const cached = localStorage.getItem('subjects');
+        if (cached && cached !== 'undefined') {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setSubjects(parsed);
+              return; // Exit early, don't fetch from DB
+            }
+          } catch (e) {
+            console.error('❌ Failed to parse cached subjects:', e);
+          }
+        }
+      }
+
+      // Fresh Mode: Always fetch from DB, or Cache Mode fallback
+      try {
+        const { data, error } = await supabase.from('subjects').select('*');
+        if (!error && data) {
+          setSubjects(data);
+          // Always update cache when we fetch from DB
+          localStorage.setItem('subjects', JSON.stringify(data));
+        } else {
+          console.error('Failed to fetch subjects:', error);
+        }
+      } catch (error) {
+        console.error('❌ Database error:', error);
+      }
+    };
+    loadSubjects();
+  }, [fetchFromDb]);
+
+  // Load lessons for selected subject
+  useEffect(() => {
+    const fetchLessons = async () => {
+      if (!subjectSlug) {
+        setLessons([]);
+        setSelectedLesson('');
+        setTopics([]);
+        setTopicName('');
+        return;
+      }
+      
+      const subject = subjects.find((s) => s.slug === subjectSlug);
+      if (!subject) return;
+
+      const cacheKey = `lessons_${subject.id}`;
+      const fetchFromDb = localStorage.getItem('fetch_from_db') === 'true';
+
+      // Cache Mode: Use cache if available, only fetch if cache is empty
+      if (!fetchFromDb) {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached && cached !== 'undefined') {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setLessons(parsed);
+              
+              // Restore saved lesson if it exists in the loaded lessons
+              const savedLesson = localStorage.getItem('lastSelectedLesson');
+              if (savedLesson && parsed.some(lesson => lesson.name === savedLesson)) {
+                setSelectedLesson(savedLesson);
+              }
+              
+              return; // Exit early, don't fetch from DB
+            }
+          } catch (e) {
+            console.error('❌ Failed to parse cached lessons:', e);
+          }
+        }
+      }
+
+      // Fresh Mode: Always fetch from DB, or Cache Mode fallback
+      try {
+        const { data, error } = await supabase
+          .from('lessons')
+          .select('*')
+          .eq('subject_id', subject.id);
+
+        if (!error && data) {
+          setLessons(data);
+          // Always update cache when we fetch from DB
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+          
+          // Restore saved lesson if it exists in the loaded lessons
+          const savedLesson = localStorage.getItem('lastSelectedLesson');
+          if (savedLesson && data.some(lesson => lesson.name === savedLesson)) {
+            setSelectedLesson(savedLesson);
+          }
+        } else {
+          console.error('Failed to fetch lessons:', error);
+        }
+      } catch (error) {
+        console.error('❌ Database error:', error);
+      }
+    };
+
+    fetchLessons();
+  }, [subjectSlug, subjects, fetchFromDb]);
+
+  // Load topics for selected lesson
+  useEffect(() => {
+    const fetchTopics = async () => {
+      if (!selectedLesson) {
+        setTopics([]);
+        setTopicName('');
+        return;
+      }
+      
+      const lesson = lessons.find((l) => l.name === selectedLesson);
+      if (!lesson) return;
+
+      const cacheKey = `topics_${lesson.id}`;
+      const fetchFromDb = localStorage.getItem('fetch_from_db') === 'true';
+
+      // Cache Mode: Use cache if available, only fetch if cache is empty
+      if (!fetchFromDb) {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached && cached !== 'undefined') {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setTopics(parsed);
+              return; // Exit early, don't fetch from DB
+            }
+          } catch (e) {
+            console.error('❌ Failed to parse cached topics:', e);
+          }
+        }
+      }
+
+      // Fresh Mode: Always fetch from DB, or Cache Mode fallback
+      try {
+        const { data, error } = await supabase
+          .from('topics')
+          .select('*')
+          .eq('lesson_id', lesson.id);
+
+        if (!error && data) {
+          setTopics(data);
+          // Always update cache when we fetch from DB
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        } else {
+          console.error('Failed to fetch topics:', error);
+        }
+      } catch (error) {
+        console.error('❌ Database error:', error);
+      }
+    };
+
+    fetchTopics();
+  }, [selectedLesson, lessons, fetchFromDb]);
+
+  // Function to generate single AI topic and navigate directly
+  const generateAndNavigateToRandomTopic = async () => {
+    if (!subjectSlug || !selectedLesson) return;
+    
+    setIsGeneratingTopics(true);
+    try {
+      const response = await fetch('/api/ai-generate-topics', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          subject: subjectSlug,
+          lesson: selectedLesson,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.success && data.topics.length > 0) {
+        // Pick a random topic from the generated ones
+        const randomTopic = data.topics[Math.floor(Math.random() * data.topics.length)];
+        
+        // Store the topic content in sessionStorage for the speaking page
+        if (randomTopic.content) {
+          sessionStorage.setItem('currentTopicContent', randomTopic.content);
+        }
+        
+        // Navigate directly to speaking practice with the random topic
+        window.location.href = `/speaking/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(randomTopic.name)}`;
+      } else {
+        console.error('Failed to generate AI topics:', data.error);
+        setToastMsg('❌ Failed to generate AI topics');
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+        setIsGeneratingTopics(false);
+      }
+    } catch (error) {
+      console.error('Error generating AI topics:', error);
+      setToastMsg('❌ Error generating AI topics');
       setShowToast(true);
-      setTimeout(() => location.reload(), 1200);
+      setTimeout(() => setShowToast(false), 3000);
+      setIsGeneratingTopics(false);
     }
   };
+
+  // Function to fetch previous sessions
+  const fetchPreviousSessions = async () => {
+    if (!subjectSlug || !selectedLesson) return;
+    
+    console.log('🔍 Fetching previous sessions with:', {
+      subjectSlug,
+      selectedLesson,
+      encodedSubject: encodeURIComponent(subjectSlug),
+      encodedLesson: encodeURIComponent(selectedLesson)
+    });
+    
+    try {
+      const url = `/api/get-previous-sessions?subject=${encodeURIComponent(subjectSlug)}&lesson=${encodeURIComponent(selectedLesson)}`;
+      console.log('🌐 API URL:', url);
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      console.log('📊 API Response:', data);
+      
+      if (data.success) {
+        setPreviousTopics(data.topics);
+        setToastMsg(`📚 Found ${data.count} previous topics!`);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+      } else {
+        console.error('Failed to fetch previous sessions:', data.error);
+        setPreviousTopics([]);
+      }
+    } catch (error) {
+      console.error('Error fetching previous sessions:', error);
+      setPreviousTopics([]);
+    }
+  };
+
+  // Combined topics (existing + AI generated)
+  const allTopics = [...topics, ...aiTopics];
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 p-0 text-gray-100">
       {/* Sticky Header */}
       <header className="sticky top-0 z-20 bg-gray-950/90 backdrop-blur shadow-md py-4 px-4 flex flex-col items-center border-b border-gray-800">
         <h1 className="text-2xl font-extrabold tracking-tight text-purple-400 flex items-center gap-2 drop-shadow">
-          <span role="img" aria-label="settings">⚙️</span> Settings
+          <span role="img" aria-label="bolt">⚡</span> Quick Learn Quiz
         </h1>
-        <div className="flex gap-2 mt-2">
+        <div className="flex gap-2 mt-2 flex-wrap justify-center">
           <Link href="/">
-            <button className="px-4 py-2 bg-gray-800 text-purple-200 rounded-lg shadow hover:bg-purple-800 hover:text-white transition-all text-sm font-semibold border border-purple-700">
+            <button className="px-4 py-2 bg-purple-600 text-white rounded-lg shadow hover:bg-purple-700 transition-all text-sm font-semibold border border-purple-500">
               Home
             </button>
           </Link>
+          <Link href="/settings">
+            <button className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg shadow hover:bg-purple-700 hover:text-white transition-all text-sm font-semibold border border-gray-600">
+              Settings
+            </button>
+          </Link>
           <Link href="/admin">
-            <button className="px-4 py-2 bg-gray-800 text-purple-200 rounded-lg shadow hover:bg-purple-800 hover:text-white transition-all text-sm font-semibold border border-purple-700">
+            <button className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg shadow hover:bg-purple-700 hover:text-white transition-all text-sm font-semibold border border-gray-600">
               Admin Panel
             </button>
           </Link>
           <Link href="/progress">
-            <button className="px-4 py-2 bg-green-800 text-green-200 rounded-lg shadow hover:bg-green-900 hover:text-white transition-all text-sm font-semibold border border-green-700">
+            <button className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg shadow hover:bg-purple-700 hover:text-white transition-all text-sm font-semibold border border-gray-600">
               Progress
             </button>
           </Link>
@@ -96,125 +345,113 @@ export default function SettingsPage() {
       </header>
 
       <div className="max-w-md mx-auto mt-6 px-2">
-        {/* Settings Panel */}
-        <div className="mb-6 rounded-lg border border-gray-800 bg-gray-900 shadow-sm">
-          <div className="px-4 py-4">
-            <h2 className="text-lg font-semibold text-purple-300 mb-4 flex items-center gap-2">
-              <span role="img" aria-label="settings">⚙️</span> Quiz Settings
-            </h2>
-            
-            <label className="block text-sm mb-1 font-medium text-purple-200">Fuzzy Match Threshold (0 = strict, 1 = lenient)</label>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={threshold}
-              onChange={(e) => setThreshold(parseFloat(e.target.value))}
-              className="w-full mb-2 accent-purple-500"
-            />
-            <div className="text-xs text-purple-400 mb-4">Current: {threshold}</div>
 
-            <div className="flex items-center mb-3">
-              <input
-                id="shuffle"
-                type="checkbox"
-                checked={shuffleEnabled}
-                onChange={(e) => setShuffleEnabled(e.target.checked)}
-                className="accent-purple-500"
-              />
-              <label htmlFor="shuffle" className="ml-2 text-sm text-purple-200">Shuffle Questions</label>
-              <span className="ml-2 text-xs text-purple-400">{shuffleEnabled ? 'Enabled' : 'Disabled'}</span>
-            </div>
-
-            <div className="flex items-center mb-3">
-              <input
-                id="autoSpeak"
-                type="checkbox"
-                checked={autoSpeak}
-                onChange={(e) => setAutoSpeak(e.target.checked)}
-                className="accent-purple-500"
-              />
-              <label htmlFor="autoSpeak" className="ml-2 text-sm text-purple-200">Auto Speak Question on Load</label>
-            </div>
-
-            <div className="flex items-center mb-3">
-              <input
-                id="autoSpeakAnswer"
-                type="checkbox"
-                checked={autoSpeakAnswer}
-                onChange={(e) => setAutoSpeakAnswer(e.target.checked)}
-                className="accent-purple-500"
-              />
-              <label htmlFor="autoSpeakAnswer" className="ml-2 text-sm text-purple-200">Auto Speak Answer after Submit</label>
-            </div>
-
-            <div className="flex items-center mb-4">
-              <input
-                id="fetchDb"
-                type="checkbox"
-                checked={fetchFromDb}
-                onChange={(e) => handleToggleDbFetch(e.target.checked)}
-                className="accent-purple-500"
-              />
-              <label htmlFor="fetchDb" className="ml-2 text-sm text-purple-200">Fetch latest from DB (Overwrite cache)</label>
-            </div>
-
-            {/* Timer Setting */}
-            <div className="mb-4">
-              <label className="block text-sm mb-1 font-medium text-purple-200" htmlFor="timerSeconds">
-                Per-Question Timer (seconds)
-              </label>
-              <input
-                id="timerSeconds"
-                type="number"
-                min={5}
-                max={120}
-                step={1}
-                value={timerSeconds}
-                onChange={(e) => setTimerSeconds(Number(e.target.value))}
-                className="w-full p-2 border border-gray-700 rounded-lg bg-gray-900 text-purple-100 shadow mb-1"
-              />
-              <div className="text-xs text-purple-400">Current: {timerSeconds} seconds</div>
-            </div>
-            
-            {/* Spaced Repetition Setting */}
-            <div className="mb-4">
-              <label className="block text-sm mb-1 font-medium text-purple-200" htmlFor="practiceCount">
-                Practice Each Missed Question (Spaced Repetition)
-              </label>
-              <input
-                id="practiceCount"
-                type="number"
-                min={1}
-                max={5}
-                step={1}
-                value={practiceCount}
-                onChange={(e) => setPracticeCount(Number(e.target.value))}
-                className="w-full p-2 border border-gray-700 rounded-lg bg-gray-900 text-purple-100 shadow mb-1"
-              />
-              <div className="text-xs text-purple-400">Current: {practiceCount} times</div>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={handleSaveSettings}
-                className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-2 rounded-lg font-semibold shadow hover:from-purple-800 hover:to-indigo-800 hover:scale-105 transition-all"
-              >
-                💾 Save Settings
-              </button>
+        {/* Subject Dropdown */}
+        <div className="mb-4">
+          <label className="block mb-2 font-medium text-purple-300">📘 Select Subject:</label>
+          <select
+            value={subjectSlug}
+            onChange={(e) => {
+              const selectedSubject = e.target.value;
+              setSubjectSlug(selectedSubject);
+              setSelectedLesson('');
+              setTopicName('');
+              setSelectedMode('');
+              setAiTopics([]);
+              setPreviousTopics([]);
               
-              <button
-                onClick={handleClearStorage}
-                className="w-full bg-gradient-to-r from-red-600 to-pink-500 text-white py-2 rounded-lg font-semibold shadow hover:scale-105 hover:from-red-700 hover:to-pink-600 transition-all"
-              >
-                🧹 Clear Local Storage
-              </button>
-            </div>
-          </div>
+              // Save to localStorage
+              if (selectedSubject) {
+                localStorage.setItem('lastSelectedSubject', selectedSubject);
+              } else {
+                localStorage.removeItem('lastSelectedSubject');
+              }
+              // Clear saved lesson when subject changes
+              localStorage.removeItem('lastSelectedLesson');
+            }}
+            className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 bg-gray-950 text-purple-100 shadow-sm"
+          >
+            <option value="" className="text-gray-400">-- Choose Subject --</option>
+            {[...subjects]
+              .sort((a, b) => a.label.localeCompare(b.label))
+              .map((subject) => (
+          <option key={subject.id} value={subject.slug} className="text-gray-900 bg-purple-100">
+            {subject.label}
+          </option>
+              ))}
+          </select>
         </div>
+
+        {/* Lesson Dropdown */}
+        {lessons.length > 0 && (
+          <div className="mb-4">
+            <label className="block mb-2 font-medium text-purple-300">📝 Select Lesson:</label>
+            <select
+              value={selectedLesson}
+              onChange={(e) => {
+                const selectedLessonValue = e.target.value;
+                setSelectedLesson(selectedLessonValue);
+                setTopicName('');
+                setSelectedMode('');
+                setAiTopics([]);
+                setPreviousTopics([]);
+                
+                // Save to localStorage
+                if (selectedLessonValue) {
+                  localStorage.setItem('lastSelectedLesson', selectedLessonValue);
+                } else {
+                  localStorage.removeItem('lastSelectedLesson');
+                }
+              }}
+              className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 bg-gray-950 text-purple-100 shadow-sm"
+            >
+              <option value="" className="text-gray-400">-- Choose Lesson --</option>
+              {lessons.map((lesson) => (
+                <option key={lesson.id} value={lesson.name} className="text-gray-900 bg-purple-100">
+                  {lesson.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+
+
+        {/* Topic Selection */}
+        {subjectSlug && selectedLesson && topics.length > 0 && (
+          <div className="mb-4">
+            <label className="block mb-2 font-medium text-purple-300">📁 Curriculum Topics:</label>
+            <select
+              value={topicName}
+              onChange={(e) => setTopicName(e.target.value)}
+              className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 bg-gray-950 text-purple-100 shadow-sm"
+            >
+              <option value="" className="text-gray-400">-- Choose Topic --</option>
+              {topics.map((topic) => (
+                <option key={topic.id} value={topic.name} className="text-gray-900 bg-green-100">
+                  {topic.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        {subjectSlug && selectedLesson && topicName && (
+          <div className="flex flex-col gap-3 mt-4">
+            <Link href={`/quiz/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
+              <button className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-purple-800 hover:to-indigo-800 transition-all flex items-center justify-center gap-2">
+                ▶️ Start Quiz
+              </button>
+            </Link>
+            <Link href={`/learn/${subjectSlug}/${encodeURIComponent(selectedLesson)}/${encodeURIComponent(topicName)}`}>
+              <button className="w-full bg-gradient-to-r from-green-500 to-teal-400 text-gray-900 py-3 rounded-lg font-bold shadow hover:scale-105 hover:from-green-600 hover:to-teal-500 transition-all flex items-center justify-center gap-2">
+                📖 Learn
+              </button>
+            </Link>
+          </div>
+        )}
       </div>
-      
       <Toast message={toastMsg} show={showToast} />
     </main>
   );
