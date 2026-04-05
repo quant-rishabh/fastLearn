@@ -16,6 +16,7 @@ export default function SettingsPage() {
   const [threshold, setThreshold] = useState(0.3);
   const [shuffleEnabled, setShuffleEnabled] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(false);
+  const [autoSpeakAnswer, setAutoSpeakAnswer] = useState(false);
   const [fetchFromDb, setFetchFromDb] = useState(true);
   const [timerSeconds, setTimerSeconds] = useState(20);
   const [practiceCount, setPracticeCount] = useState(2);
@@ -27,6 +28,7 @@ export default function SettingsPage() {
     const storedThreshold = localStorage.getItem('fuzzy_threshold');
     const storedShuffle = localStorage.getItem('shuffle_enabled');
     const storedAutoSpeak = localStorage.getItem('auto_speak');
+    const storedAutoSpeakAnswer = localStorage.getItem('auto_speak_answer');
     const storedFetchDb = localStorage.getItem('fetch_from_db');
     const storedTimer = localStorage.getItem('quiz_timer_seconds');
     const storedPractice = localStorage.getItem('practice_count');
@@ -34,6 +36,7 @@ export default function SettingsPage() {
     if (storedThreshold) setThreshold(parseFloat(storedThreshold));
     if (storedShuffle) setShuffleEnabled(storedShuffle === 'true');
     if (storedAutoSpeak) setAutoSpeak(storedAutoSpeak === 'true');
+    if (storedAutoSpeakAnswer) setAutoSpeakAnswer(storedAutoSpeakAnswer === 'true');
     if (storedFetchDb) setFetchFromDb(storedFetchDb === 'true');
     if (storedTimer) setTimerSeconds(Number(storedTimer));
     if (storedPractice) setPracticeCount(Number(storedPractice));
@@ -48,6 +51,7 @@ export default function SettingsPage() {
     localStorage.setItem('fuzzy_threshold', threshold.toString());
     localStorage.setItem('shuffle_enabled', shuffleEnabled.toString());
     localStorage.setItem('auto_speak', String(autoSpeak));
+    localStorage.setItem('auto_speak_answer', String(autoSpeakAnswer));
     localStorage.setItem('fetch_from_db', String(fetchFromDb));
     localStorage.setItem('quiz_timer_seconds', timerSeconds.toString());
     localStorage.setItem('practice_count', practiceCount.toString());
@@ -132,6 +136,17 @@ export default function SettingsPage() {
                 className="accent-purple-500"
               />
               <label htmlFor="autoSpeak" className="ml-2 text-sm text-purple-200">Auto Speak Question on Load</label>
+            </div>
+
+            <div className="flex items-center mb-3">
+              <input
+                id="autoSpeakAnswer"
+                type="checkbox"
+                checked={autoSpeakAnswer}
+                onChange={(e) => setAutoSpeakAnswer(e.target.checked)}
+                className="accent-purple-500"
+              />
+              <label htmlFor="autoSpeakAnswer" className="ml-2 text-sm text-purple-200">Auto Speak Answer after Submit</label>
             </div>
 
             <div className="flex items-center mb-4">
