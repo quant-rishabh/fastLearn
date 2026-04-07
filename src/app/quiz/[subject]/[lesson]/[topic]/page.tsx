@@ -480,6 +480,13 @@ const clearInputAndSpeech = () => {
     return text.replace(/[.,\/#!$%\^&*;:{}=\-_`~()?"'’]/g, '').replace(/\s{2,}/g, ' ').trim().toLowerCase();
   }
 
+  // Helper to check if answer is purely numeric (for mobile number keyboard)
+  function isNumericAnswer(): boolean {
+    if (!questions[currentIndex]?.answer) return false;
+    const answers = questions[currentIndex].answer.split('@');
+    return answers.every(ans => /^\d+$/.test(ans.trim()));
+  }
+
   // Function to check if an individual answer is correct (ignoring punctuation)
   const isAnswerCorrect = (answer: string) => {
     const correctAnswer = questions[currentIndex]?.answer || '';
@@ -1017,6 +1024,7 @@ const clearInputAndSpeech = () => {
                       }
                     }}
                     placeholder={`Type or hold mic to speak...`}
+                    inputMode={isNumericAnswer() ? 'numeric' : 'text'}
                     className={`flex-1 p-3 border rounded-lg bg-gray-900 text-gray-100 focus:ring-2 focus:ring-purple-500 shadow resize-none min-h-[80px] text-base leading-relaxed ${
                       isListening ? 'border-red-500 border-2' : 'border-gray-700'
                     }`}
