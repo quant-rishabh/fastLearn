@@ -71,6 +71,25 @@ export default function QuizPage() {
   const isRecordingRef = useRef<boolean>(false); // Synchronous recording state (fixes async state issues)
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
+
+  // Preload voices on mount (fixes getVoices() returning empty array)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        voicesRef.current = voices;
+        console.log('🔊 Voices loaded:', voices.length);
+      }
+    };
+    
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    
+    return () => { window.speechSynthesis.onvoiceschanged = null; };
+  }, []);
 
   // Keep finishedRef in sync with finished state
   useEffect(() => {
@@ -640,47 +659,40 @@ const clearInputAndSpeech = () => {
   };
 
   // Play audio using browser's Web Speech API (SpeechSynthesis)
-  // Supports English and Hindi with female voice preference
+  // Pure browser TTS - no API calls, instant playback
   function playGoogleTTS(text: string) {
-    if (!text || typeof window === 'undefined' || !window.speechSynthesis) {
-      console.log('🔊 SpeechSynthesis not supported');
-      return;
-    }
+    if (!text || typeof window === 'undefined' || !window.speechSynthesis) return;
 
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
     
-    // Get speech speed from localStorage (default 1.1)
+    // Speed from settings
     const storedSpeed = localStorage.getItem('speech_speed');
     utterance.rate = storedSpeed ? parseFloat(storedSpeed) : 1.1;
 
-    const voices = window.speechSynthesis.getVoices();
+    // Use preloaded voices, fallback to getVoices()
+    let voices = voicesRef.current.length > 0 ? voicesRef.current : window.speechSynthesis.getVoices();
+    
+    // If still no voices, retry after 50ms (voices load async)
+    if (voices.length === 0) {
+      setTimeout(() => playGoogleTTS(text), 50);
+      return;
+    }
+
     const hasHindi = /[\u0900-\u097F]/.test(text);
-
-    let selectedVoice;
-
-    if (hasHindi) {
-      // Try Hindi female (Google हिन्दी is usually female-like)
-      selectedVoice = voices.find(v => v.name.includes('Google हिन्दी'));
-    } else {
-      // Priority: Female English voices
-      selectedVoice =
-        voices.find(v => v.name.includes('Google UK English Female')) ||
-        voices.find(v => v.name.includes('Zira')) || // Microsoft female
+    const v = hasHindi
+      ? voices.find(v => v.name.includes('Google हिन्दी')) || voices.find(v => v.lang.startsWith('hi'))
+      : voices.find(v => v.name.includes('Google UK English Female')) ||
+        voices.find(v => v.name.includes('Zira')) ||
         voices.find(v => v.name.toLowerCase().includes('female')) ||
         voices.find(v => v.name.includes('Google US English')) ||
         voices[0];
-    }
 
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
-      utterance.lang = selectedVoice.lang;
-      console.log('🔊 Using voice:', selectedVoice.name);
+    if (v) {
+      utterance.voice = v;
+      utterance.lang = v.lang;
     }
-
-    utterance.onstart = () => console.log('🔊 Speaking:', text.substring(0, 30));
-    utterance.onerror = (e) => console.error('🔊 Speech error:', e.error);
 
     window.speechSynthesis.speak(utterance);
   }
