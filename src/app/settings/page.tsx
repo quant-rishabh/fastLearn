@@ -20,6 +20,7 @@ export default function SettingsPage() {
   const [fetchFromDb, setFetchFromDb] = useState(true);
   const [timerSeconds, setTimerSeconds] = useState(20);
   const [practiceCount, setPracticeCount] = useState(2);
+  const [speechSpeed, setSpeechSpeed] = useState(1.1);
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
 
@@ -32,6 +33,7 @@ export default function SettingsPage() {
     const storedFetchDb = localStorage.getItem('fetch_from_db');
     const storedTimer = localStorage.getItem('quiz_timer_seconds');
     const storedPractice = localStorage.getItem('practice_count');
+    const storedSpeechSpeed = localStorage.getItem('speech_speed');
 
     if (storedThreshold) setThreshold(parseFloat(storedThreshold));
     if (storedShuffle) setShuffleEnabled(storedShuffle === 'true');
@@ -40,6 +42,7 @@ export default function SettingsPage() {
     if (storedFetchDb) setFetchFromDb(storedFetchDb === 'true');
     if (storedTimer) setTimerSeconds(Number(storedTimer));
     if (storedPractice) setPracticeCount(Number(storedPractice));
+    if (storedSpeechSpeed) setSpeechSpeed(parseFloat(storedSpeechSpeed));
   }, []);
 
   const handleToggleDbFetch = (val: boolean) => {
@@ -55,6 +58,7 @@ export default function SettingsPage() {
     localStorage.setItem('fetch_from_db', String(fetchFromDb));
     localStorage.setItem('quiz_timer_seconds', timerSeconds.toString());
     localStorage.setItem('practice_count', practiceCount.toString());
+    localStorage.setItem('speech_speed', speechSpeed.toString());
     setToastMsg('✅ Settings saved!');
     setShowToast(true);
     setTimeout(() => setShowToast(false), 2000);
@@ -194,6 +198,23 @@ export default function SettingsPage() {
                 className="w-full p-2 border border-gray-700 rounded-lg bg-gray-900 text-purple-100 shadow mb-1"
               />
               <div className="text-xs text-purple-400">Current: {practiceCount} times</div>
+            </div>
+
+            {/* Speech Speed Setting */}
+            <div className="mb-4">
+              <label className="block text-sm mb-1 font-medium text-purple-200">
+                🔊 Speech Speed (1x = Normal, 2x = Fast)
+              </label>
+              <input
+                type="range"
+                min={1}
+                max={2}
+                step={0.1}
+                value={speechSpeed}
+                onChange={(e) => setSpeechSpeed(parseFloat(e.target.value))}
+                className="w-full mb-2 accent-purple-500"
+              />
+              <div className="text-xs text-purple-400">Current: {speechSpeed}x speed</div>
             </div>
 
             <div className="flex flex-col gap-3">
