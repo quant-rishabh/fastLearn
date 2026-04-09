@@ -639,7 +639,53 @@ const clearInputAndSpeech = () => {
     }
   };
 
-  // Play audio from OpenAI TTS (streaming for faster playback)
+  // Play audio using browser's Web Speech API (SpeechSynthesis)
+  // Supports English and Hindi with female voice preference
+  function playGoogleTTS(text: string) {
+    if (!text || typeof window === 'undefined' || !window.speechSynthesis) {
+      console.log('🔊 SpeechSynthesis not supported');
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Get speech speed from localStorage (default 1.1)
+    const storedSpeed = localStorage.getItem('speech_speed');
+    utterance.rate = storedSpeed ? parseFloat(storedSpeed) : 1.1;
+
+    const voices = window.speechSynthesis.getVoices();
+    const hasHindi = /[\u0900-\u097F]/.test(text);
+
+    let selectedVoice;
+
+    if (hasHindi) {
+      // Try Hindi female (Google हिन्दी is usually female-like)
+      selectedVoice = voices.find(v => v.name.includes('Google हिन्दी'));
+    } else {
+      // Priority: Female English voices
+      selectedVoice =
+        voices.find(v => v.name.includes('Google UK English Female')) ||
+        voices.find(v => v.name.includes('Zira')) || // Microsoft female
+        voices.find(v => v.name.toLowerCase().includes('female')) ||
+        voices.find(v => v.name.includes('Google US English')) ||
+        voices[0];
+    }
+
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+      utterance.lang = selectedVoice.lang;
+      console.log('🔊 Using voice:', selectedVoice.name);
+    }
+
+    utterance.onstart = () => console.log('🔊 Speaking:', text.substring(0, 30));
+    utterance.onerror = (e) => console.error('🔊 Speech error:', e.error);
+
+    window.speechSynthesis.speak(utterance);
+  }
+
+  /* COMMENTED OUT - OpenAI TTS (too slow)
   async function playOpenAITTS(text: string, voice = 'alloy') {
     console.log('🔊 playOpenAITTS called with text:', text?.substring(0, 50));
     try {
@@ -649,24 +695,20 @@ const clearInputAndSpeech = () => {
         body: JSON.stringify({ text, voice }),
       });
       
-      // Debug: Check what content type we got
       const contentType = res.headers.get('content-type');
       console.log('🔊 Response content-type:', contentType);
       
-      // If not OK or not audio, it's an error response
       if (!res.ok || !contentType?.includes('audio')) {
         const errorText = await res.text();
         console.error('🔊 TTS error:', errorText);
         return;
       }
       
-      // Get blob and explicitly set MIME type (fixes iOS/Safari issues)
       const blob = await res.blob();
       const audioBlob = new Blob([blob], { type: 'audio/mpeg' });
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
       
-      // Clean up blob URL after playback
       audio.onended = () => URL.revokeObjectURL(audioUrl);
       audio.onerror = (e) => {
         console.error('🔊 Audio playback error:', e);
@@ -679,9 +721,7 @@ const clearInputAndSpeech = () => {
       console.error('🔊 playOpenAITTS error:', error);
     }
   }
-
-  // Alias for backward compatibility
-  const playGoogleTTS = playOpenAITTS;
+  */
 
   const [timerSeconds, setTimerSeconds] = useState(20); // default timer value
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
