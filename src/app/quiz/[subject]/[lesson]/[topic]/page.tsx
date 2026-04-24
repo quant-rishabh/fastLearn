@@ -413,8 +413,9 @@ useEffect(() => {
     releaseMicrophone();
   };
 
-const spokenIndexRef = useRef<number | null>(null);
-const spokenAnswerIndexRef = useRef<number | null>(null);
+const [sessionQuestionNumber, setSessionQuestionNumber] = useState<number>(1); // Sequential question number for session
+const spokenSessionRef = useRef<number | null>(null);
+const spokenAnswerSessionRef = useRef<number | null>(null);
 
 useEffect(() => {
   const speakSetting = localStorage.getItem('auto_speak');
@@ -424,12 +425,12 @@ useEffect(() => {
     questions?.length > 0 &&
     currentIndex >= 0 && // Only speak if we have a valid index
     questions[currentIndex]?.question &&
-    spokenIndexRef.current !== currentIndex
+    spokenSessionRef.current !== sessionQuestionNumber
   ) {
     playGoogleTTS(questions[currentIndex].question);
-    spokenIndexRef.current = currentIndex;
+    spokenSessionRef.current = sessionQuestionNumber;
   }
-}, [currentIndex, questions]);
+}, [currentIndex, sessionQuestionNumber, questions]);
 
 // Auto-speak answer after submission
 useEffect(() => {
@@ -441,14 +442,14 @@ useEffect(() => {
     questions?.length > 0 &&
     currentIndex >= 0 &&
     questions[currentIndex]?.answer &&
-    spokenAnswerIndexRef.current !== currentIndex
+    spokenAnswerSessionRef.current !== sessionQuestionNumber
   ) {
     // Speak the answer (replace @ with "and" for multi-answers)
     const answerText = questions[currentIndex].answer.replace(/@/g, ' and ');
     playGoogleTTS(answerText);
-    spokenAnswerIndexRef.current = currentIndex;
+    spokenAnswerSessionRef.current = sessionQuestionNumber;
   }
-}, [hasSubmitted, currentIndex, questions]);
+}, [hasSubmitted, currentIndex, sessionQuestionNumber, questions]);
 
 
   // Add this function to clear both input and speech buffer
@@ -738,7 +739,6 @@ const clearInputAndSpeech = () => {
   const [timerSeconds, setTimerSeconds] = useState(20); // default timer value
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [timerActive, setTimerActive] = useState(false);
-  const [sessionQuestionNumber, setSessionQuestionNumber] = useState<number>(1); // Sequential question number for session
   const [canAdvance, setCanAdvance] = useState(false); // NEW: controls Enter for next
 
   // Load timer setting from localStorage
@@ -981,7 +981,7 @@ const clearInputAndSpeech = () => {
         <div className="bg-gray-950/80 border border-gray-800 rounded-xl shadow-lg p-4 mb-4 w-full flex flex-col">
           <h2 className="text-lg font-bold mb-2 text-purple-200 drop-shadow">Question {sessionQuestionNumber}</h2>
           <div className="flex justify-between items-center mb-2">
-            <p className="text-xs text-gray-400">Question {sessionQuestionNumber} of {questions.length}</p>
+            <p className="text-xs text-gray-400">Question {sessionQuestionNumber} of {sessionQuestionNumber + remainingQuestions.length - 1}</p>
             <div className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-lg transition-all duration-300 transform ${
               timeLeft !== null && timeLeft <= 5 
                 ? 'bg-red-600 text-white shadow-lg shadow-red-500/50 animate-pulse scale-110 border-2 border-red-400' 
