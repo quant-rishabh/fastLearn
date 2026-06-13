@@ -305,52 +305,86 @@ export default function WorkoutAnalyticsPage() {
         {/* Graph 1 — Weight Progress vs Trajectory */}
         <div className="bg-gray-800/60 rounded-lg p-6 mb-8">
           <h2 className="text-2xl font-semibold text-white mb-2">⚖️ Weight Progress vs Target Trajectories</h2>
-          <p className="text-gray-400 text-sm mb-6">Your actual weight vs projected loss rates from your starting weight</p>
+          <p className="text-gray-400 text-sm mb-6">Weekly actual weight (last 30 days) + projection from today's weight forward</p>
           <ResponsiveContainer width="100%" height={320}>
             <LineChart
               data={(() => {
-                if (weightLogs.length === 0) return [];
-                const start = weightLogs[0];
-                const startDate = new Date(start.date);
-                const endDate = new Date(weightLogs[weightLogs.length - 1].date);
-                // extend projection 30 days beyond last log
-                const projEnd = new Date(endDate);
-                projEnd.setDate(projEnd.getDate() + 30);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const thirtyDaysAgo = new Date(today);
+                thirtyDaysAgo.setDate(today.getDate() - 30);
+                const projEnd = new Date(today);
+                projEnd.setDate(today.getDate() + 60); // project 60 days forward
+
+                // Build weekly points: past 30 days (weekly) + future 60 days (weekly)
                 const points: any[] = [];
-                for (let d = new Date(startDate); d <= projEnd; d.setDate(d.getDate() + 1)) {
-                  const dateStr = d.toISOString().split('T')[0];
-                  const dayNum = Math.round((d.getTime() - startDate.getTime()) / 86400000);
-                  const actual = weightLogs.find(w => w.date === dateStr);
+
+                // Past: one point per week (Mon) within last 30 days
+                for (let d = new Date(thirtyDaysAgo); d <= today; d.setDate(d.getDate() + 7)) {
+                  const weekStr = d.toISOString().split('T')[0];
+                  // find closest actual log within ±3 days
+                  const nearby = weightLogs.filter(w => {
+                    const diff = Math.abs(new Date(w.date).getTime() - d.getTime()) / 86400000;
+                    return diff <= 3;
+                  });
+                  const actual = nearby.length > 0
+                    ? Math.round(nearby.reduce((s, w) => s + w.weight, 0) / nearby.length * 10) / 10
+                    : null;
                   points.push({
-                    date: dateStr,
                     label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                    actual: actual ? actual.weight : null,
-                    proj05: Math.round((start.weight - (0.5 / 7) * dayNum) * 10) / 10,
-                    proj07: Math.round((start.weight - (0.7 / 7) * dayNum) * 10) / 10,
-                    proj10: Math.round((start.weight - (1.0 / 7) * dayNum) * 10) / 10,
+                    actual,
+                    proj05: null,
+                    proj07: null,
+                    proj10: null,
+                    isToday: false,
                   });
                 }
+
+                // Today's point — anchor for projections
+                points.push({
+                  label: 'Today',
+                  actual: currentWeight,
+                  proj05: currentWeight,
+                  proj07: currentWeight,
+                  proj10: currentWeight,
+                  isToday: true,
+                });
+
+                // Future: weekly projections from today
+                for (let week = 1; week * 7 <= 60; week++) {
+                  const d = new Date(today);
+                  d.setDate(today.getDate() + week * 7);
+                  points.push({
+                    label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                    actual: null,
+                    proj05: Math.round((currentWeight - 0.5 * week) * 10) / 10,
+                    proj07: Math.round((currentWeight - 0.7 * week) * 10) / 10,
+                    proj10: Math.round((currentWeight - 1.0 * week) * 10) / 10,
+                  });
+                }
+
                 return points;
               })()}
               margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="label" stroke="#9CA3AF" tick={{ fontSize: 11 }} interval={Math.max(1, Math.floor(weightLogs.length / 8))} />
+              <XAxis dataKey="label" stroke="#9CA3AF" tick={{ fontSize: 11 }} interval={1} />
               <YAxis stroke="#9CA3AF" tick={{ fontSize: 11 }} domain={['auto', 'auto']} />
               <Tooltip
                 contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px' }}
                 labelStyle={{ color: '#F9FAFB' }}
+                formatter={(value: any, name: string) => [`${value} kg`, name]}
               />
               <Legend wrapperStyle={{ color: '#D1D5DB', fontSize: 13 }} />
               <ReferenceLine y={userStats.targetWeight} stroke="#F59E0B" strokeDasharray="6 3" label={{ value: `Goal ${userStats.targetWeight}kg`, fill: '#F59E0B', fontSize: 11 }} />
-              <Line type="monotone" dataKey="actual" name="Actual Weight" stroke="#60A5FA" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
-              <Line type="monotone" dataKey="proj05" name="0.5 kg/week" stroke="#34D399" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-              <Line type="monotone" dataKey="proj07" name="0.7 kg/week" stroke="#FBBF24" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-              <Line type="monotone" dataKey="proj10" name="1.0 kg/week" stroke="#F87171" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+              <Line type="monotone" dataKey="actual" name="Actual Weight" stroke="#60A5FA" strokeWidth={2.5} dot={{ r: 4, fill: '#60A5FA' }} connectNulls={false} />
+              <Line type="monotone" dataKey="proj05" name="0.5 kg/week" stroke="#34D399" strokeWidth={1.5} dot={false} strokeDasharray="5 3" />
+              <Line type="monotone" dataKey="proj07" name="0.7 kg/week" stroke="#FBBF24" strokeWidth={1.5} dot={false} strokeDasharray="5 3" />
+              <Line type="monotone" dataKey="proj10" name="1.0 kg/week" stroke="#F87171" strokeWidth={1.5} dot={false} strokeDasharray="5 3" />
             </LineChart>
           </ResponsiveContainer>
           {weightLogs.length === 0 && (
-            <p className="text-center text-gray-500 mt-4">No weight logs found — start logging your weight daily to see progress here.</p>
+            <p className="text-center text-gray-500 mt-4">No weight logs found — projections shown from current weight ({currentWeight}kg). Start logging daily weight to see actual progress.</p>
           )}
         </div>
 
