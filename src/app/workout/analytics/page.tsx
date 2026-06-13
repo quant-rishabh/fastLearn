@@ -5,6 +5,11 @@ import { useRouter } from 'next/navigation';
 import { isLoggedIn, getCurrentUser, getUserProfile } from '@/utils/auth';
 import { getAnalytics } from '@/utils/workoutDatabase';
 import { getWeightProgress } from '@/utils/dailyWeight';
+import {
+  LineChart, Line, BarChart, Bar, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, ReferenceLine
+} from 'recharts';
 
 interface AnalyticsData {
   date: string;
@@ -27,6 +32,8 @@ export default function WorkoutAnalyticsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [dateRange, setDateRange] = useState(30); // Default 30 days
   const [currentWeight, setCurrentWeight] = useState(86);
+  const [weightLogs, setWeightLogs] = useState<{ date: string; weight: number }[]>([]);
+  const [startWeight, setStartWeight] = useState(86);
   
   // User stats for calculations
   const [userStats, setUserStats] = useState({
@@ -85,9 +92,27 @@ export default function WorkoutAnalyticsPage() {
   };
 
   useEffect(() => {
-    // Load user profile from database first
     loadUserProfileFromDB();
+    loadWeightLogs();
   }, [router]);
+
+  const loadWeightLogs = async () => {
+    try {
+      const { supabase } = await import('@/utils/supabase');
+      const nDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const { data } = await supabase
+        .from('weight_logs')
+        .select('date, weight')
+        .gte('date', nDaysAgo)
+        .order('date', { ascending: true });
+      if (data && data.length > 0) {
+        setWeightLogs(data);
+        setStartWeight(data[0].weight);
+      }
+    } catch (e) {
+      console.error('Error loading weight logs:', e);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -275,6 +300,100 @@ export default function WorkoutAnalyticsPage() {
               <div className="text-sm text-gray-300">Target Loss Rate</div>
             </div>
           </div>
+        </div>
+
+        {/* Graph 1 — Weight Progress vs Trajectory */}
+        <div className="bg-gray-800/60 rounded-lg p-6 mb-8">
+          <h2 className="text-2xl font-semibold text-white mb-2">⚖️ Weight Progress vs Target Trajectories</h2>
+          <p className="text-gray-400 text-sm mb-6">Your actual weight vs projected loss rates from your starting weight</p>
+          <ResponsiveContainer width="100%" height={320}>
+            <LineChart
+              data={(() => {
+                if (weightLogs.length === 0) return [];
+                const start = weightLogs[0];
+                const startDate = new Date(start.date);
+                const endDate = new Date(weightLogs[weightLogs.length - 1].date);
+                // extend projection 30 days beyond last log
+                const projEnd = new Date(endDate);
+                projEnd.setDate(projEnd.getDate() + 30);
+                const points: any[] = [];
+                for (let d = new Date(startDate); d <= projEnd; d.setDate(d.getDate() + 1)) {
+                  const dateStr = d.toISOString().split('T')[0];
+                  const dayNum = Math.round((d.getTime() - startDate.getTime()) / 86400000);
+                  const actual = weightLogs.find(w => w.date === dateStr);
+                  points.push({
+                    date: dateStr,
+                    label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                    actual: actual ? actual.weight : null,
+                    proj05: Math.round((start.weight - (0.5 / 7) * dayNum) * 10) / 10,
+                    proj07: Math.round((start.weight - (0.7 / 7) * dayNum) * 10) / 10,
+                    proj10: Math.round((start.weight - (1.0 / 7) * dayNum) * 10) / 10,
+                  });
+                }
+                return points;
+              })()}
+              margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis dataKey="label" stroke="#9CA3AF" tick={{ fontSize: 11 }} interval={Math.max(1, Math.floor(weightLogs.length / 8))} />
+              <YAxis stroke="#9CA3AF" tick={{ fontSize: 11 }} domain={['auto', 'auto']} />
+              <Tooltip
+                contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px' }}
+                labelStyle={{ color: '#F9FAFB' }}
+              />
+              <Legend wrapperStyle={{ color: '#D1D5DB', fontSize: 13 }} />
+              <ReferenceLine y={userStats.targetWeight} stroke="#F59E0B" strokeDasharray="6 3" label={{ value: `Goal ${userStats.targetWeight}kg`, fill: '#F59E0B', fontSize: 11 }} />
+              <Line type="monotone" dataKey="actual" name="Actual Weight" stroke="#60A5FA" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
+              <Line type="monotone" dataKey="proj05" name="0.5 kg/week" stroke="#34D399" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+              <Line type="monotone" dataKey="proj07" name="0.7 kg/week" stroke="#FBBF24" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+              <Line type="monotone" dataKey="proj10" name="1.0 kg/week" stroke="#F87171" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+            </LineChart>
+          </ResponsiveContainer>
+          {weightLogs.length === 0 && (
+            <p className="text-center text-gray-500 mt-4">No weight logs found — start logging your weight daily to see progress here.</p>
+          )}
+        </div>
+
+        {/* Graph 2 — Daily Calorie Intake */}
+        <div className="bg-gray-800/60 rounded-lg p-6 mb-8">
+          <h2 className="text-2xl font-semibold text-white mb-2">🍽️ Daily Calorie Intake</h2>
+          <p className="text-gray-400 text-sm mb-6">Green = under target (good) · Red = over target · Dotted line = daily calorie target</p>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart
+              data={analyticsData.slice().reverse().map(d => ({
+                label: new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                consumed: Math.round(d.caloriesConsumed),
+                target: Math.round(d.targetCalories),
+                over: d.caloriesConsumed > d.targetCalories,
+              }))}
+              margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis dataKey="label" stroke="#9CA3AF" tick={{ fontSize: 11 }} interval={Math.max(0, Math.floor(analyticsData.length / 10))} />
+              <YAxis stroke="#9CA3AF" tick={{ fontSize: 11 }} />
+              <Tooltip
+                contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px' }}
+                labelStyle={{ color: '#F9FAFB' }}
+                formatter={(value: any, name: string) => [
+                  `${value} cal`,
+                  name === 'consumed' ? 'Eaten' : 'Target'
+                ]}
+              />
+              <ReferenceLine y={analyticsData[0]?.targetCalories ?? 0} stroke="#A78BFA" strokeDasharray="6 3" label={{ value: 'Target', fill: '#A78BFA', fontSize: 11 }} />
+              <Bar
+                dataKey="consumed"
+                name="Calories Eaten"
+                radius={[4, 4, 0, 0]}
+              >
+                {analyticsData.slice().reverse().map((d, i) => (
+                  <Cell key={i} fill={d.caloriesConsumed > d.targetCalories ? '#F87171' : '#34D399'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+          {analyticsData.length === 0 && (
+            <p className="text-center text-gray-500 mt-4">No calorie data yet — start logging food to see this graph.</p>
+          )}
         </div>
 
         {/* Data Table */}
